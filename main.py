@@ -581,7 +581,7 @@ def process_update(update):
 🔵 <b>General Sale Dates</b>
 📊 <b>Current Sale Status</b>
 
-🚨 <b>Complete ticket information for Asian markets only!</b>"""
+🚨 <b>Complete ticket information for Asian markets only! ©2025 @BrainyError</b>"""
                 send_telegram_message(chat_id, welcome, get_bot_commands_keyboard())
                 print(f"👤 New user: {chat_id}")
             
@@ -715,7 +715,7 @@ startup_msg = """🤖 <b>K-pop Ticket Bot - REGIONAL FOCUS</b>
 • No USA Events
 • Complete Concert Information
 
-<code>Regional K-pop ticket monitoring activated!</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+<code>Regional K-pop ticket monitoring activated! ©2025 @BrainyError</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
 send_telegram_message("728916383", startup_msg)
 print("✅ Regional startup notification sent")
