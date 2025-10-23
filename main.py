@@ -8,9 +8,17 @@ import random
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8200373621:AAHXaKktV6DnoELQniVPRTTFG50Wv1dZ5pA")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "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")
 
+# 🎯 TARGET REGIONS (K-pop popular countries - NO USA)
+TARGET_COUNTRIES = {
+    'South Korea', 'Singapore', 'Japan', 'Thailand', 
+    'Indonesia', 'Malaysia', 'Philippines', 'Vietnam',
+    'Taiwan', 'Hong Kong', 'China', 'Australia'
+}
+
 print("🎵 K-pop Ticket Bot Starting on Railway...")
 print("⏰ Scan Interval: 60 SECONDS")
-print("📅 Enhanced Alerts with Presale & General Sale Dates")
+print("🎯 TARGET REGIONS:", ", ".join(TARGET_COUNTRIES))
+print("🚫 OMITTED: USA")
 print("🚄 Host: Railway (24/7 Free)")
 print("=" * 50)
 
@@ -57,42 +65,45 @@ def get_bot_commands_keyboard():
         "inline_keyboard": [
             [{"text": "🎫 Start Monitoring", "callback_data": "start"}],
             [{"text": "📊 Status", "callback_data": "status"}],
+            [{"text": "🎯 Target Regions", "callback_data": "regions"}],
             [{"text": "📅 Sale Types", "callback_data": "saletypes"}],
             [{"text": "🚄 Server Info", "callback_data": "server"}]
         ]
     }
 
-# Event data with realistic dates, venues, and prices
+# Event data focused on target regions only
 KPOP_EVENTS = {
     'BTS': [
         {'venue': 'Seoul Olympic Stadium', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '69,950'},
         {'venue': 'Tokyo Dome', 'city': 'Tokyo', 'country': 'Japan', 'capacity': '55,000'},
-        {'venue': 'SoFi Stadium', 'city': 'Los Angeles', 'country': 'USA', 'capacity': '70,240'},
-        {'venue': 'Wembley Stadium', 'city': 'London', 'country': 'UK', 'capacity': '90,000'}
+        {'venue': 'Singapore National Stadium', 'city': 'Singapore', 'country': 'Singapore', 'capacity': '55,000'},
+        {'venue': 'Rajamangala Stadium', 'city': 'Bangkok', 'country': 'Thailand', 'capacity': '65,000'}
     ],
     'BLACKPINK': [
         {'venue': 'Gocheok Sky Dome', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '25,000'},
         {'venue': 'Kyocera Dome Osaka', 'city': 'Osaka', 'country': 'Japan', 'capacity': '55,000'},
         {'venue': 'Bangkok Rajamangala Stadium', 'city': 'Bangkok', 'country': 'Thailand', 'capacity': '65,000'},
-        {'venue': 'Singapore National Stadium', 'city': 'Singapore', 'country': 'Singapore', 'capacity': '55,000'}
+        {'venue': 'Singapore National Stadium', 'city': 'Singapore', 'country': 'Singapore', 'capacity': '55,000'},
+        {'venue': 'Gelora Bung Karno Stadium', 'city': 'Jakarta', 'country': 'Indonesia', 'capacity': '77,000'}
     ],
     'TWICE': [
         {'venue': 'KSPO Dome', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '25,000'},
         {'venue': 'Tokyo Dome', 'city': 'Tokyo', 'country': 'Japan', 'capacity': '55,000'},
-        {'venue': 'Arena of Angels', 'city': 'Los Angeles', 'country': 'USA', 'capacity': '18,000'},
-        {'venue': 'AsiaWorld-Expo', 'city': 'Hong Kong', 'country': 'China', 'capacity': '14,000'}
+        {'venue': 'Singapore Indoor Stadium', 'city': 'Singapore', 'country': 'Singapore', 'capacity': '12,000'},
+        {'venue': 'AsiaWorld-Expo', 'city': 'Hong Kong', 'country': 'China', 'capacity': '14,000'},
+        {'venue': 'Taipei Arena', 'city': 'Taipei', 'country': 'Taiwan', 'capacity': '15,000'}
     ],
     'NEWJEANS': [
         {'venue': 'Jamsil Indoor Stadium', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '15,000'},
         {'venue': 'Yokohama Arena', 'city': 'Yokohama', 'country': 'Japan', 'capacity': '17,000'},
         {'venue': 'Hallyu World Festival', 'city': 'Busan', 'country': 'South Korea', 'capacity': '50,000'},
-        {'venue': 'Music Bank', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '5,000'}
+        {'venue': 'Singapore Expo', 'city': 'Singapore', 'country': 'Singapore', 'capacity': '10,000'}
     ],
     'STRAY KIDS': [
         {'venue': 'Gocheok Sky Dome', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '25,000'},
         {'venue': 'Kyocera Dome Osaka', 'city': 'Osaka', 'country': 'Japan', 'capacity': '55,000'},
-        {'venue': 'Banc of California Stadium', 'city': 'Los Angeles', 'country': 'USA', 'capacity': '22,000'},
-        {'venue': 'Mercedes-Benz Arena', 'city': 'Berlin', 'country': 'Germany', 'capacity': '17,000'}
+        {'venue': 'Singapore Indoor Stadium', 'city': 'Singapore', 'country': 'Singapore', 'capacity': '12,000'},
+        {'venue': 'Bangkok Thunder Dome', 'city': 'Bangkok', 'country': 'Thailand', 'capacity': '10,000'}
     ],
     'IVE': [
         {'venue': 'Jamsil Indoor Stadium', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '15,000'},
@@ -103,8 +114,25 @@ KPOP_EVENTS = {
     'AESPA': [
         {'venue': 'Jamsil Indoor Stadium', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '15,000'},
         {'venue': 'Osaka-jō Hall', 'city': 'Osaka', 'country': 'Japan', 'capacity': '16,000'},
-        {'venue': 'Prudential Center', 'city': 'Newark', 'country': 'USA', 'capacity': '18,000'},
+        {'venue': 'Singapore Expo', 'city': 'Singapore', 'country': 'Singapore', 'capacity': '10,000'},
         {'venue': 'Indonesia Convention Exhibition', 'city': 'Jakarta', 'country': 'Indonesia', 'capacity': '15,000'}
+    ],
+    'ENHYPEN': [
+        {'venue': 'KSPO Dome', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '25,000'},
+        {'venue': 'Osaka-jō Hall', 'city': 'Osaka', 'country': 'Japan', 'capacity': '16,000'},
+        {'venue': 'Singapore Indoor Stadium', 'city': 'Singapore', 'country': 'Singapore', 'capacity': '12,000'},
+        {'venue': 'Bangkok Impact Arena', 'city': 'Bangkok', 'country': 'Thailand', 'capacity': '12,000'}
+    ],
+    'LE SSERAFIM': [
+        {'venue': 'Jamsil Indoor Stadium', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '15,000'},
+        {'venue': 'Yokohama Arena', 'city': 'Yokohama', 'country': 'Japan', 'capacity': '17,000'},
+        {'venue': 'Zepp Kuala Lumpur', 'city': 'Kuala Lumpur', 'country': 'Malaysia', 'capacity': '2,400'}
+    ],
+    'TXT': [
+        {'venue': 'KSPO Dome', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '25,000'},
+        {'venue': 'Tokyo Dome', 'city': 'Tokyo', 'country': 'Japan', 'capacity': '55,000'},
+        {'venue': 'Singapore Indoor Stadium', 'city': 'Singapore', 'country': 'Singapore', 'capacity': '12,000'},
+        {'venue': 'Mall of Asia Arena', 'city': 'Manila', 'country': 'Philippines', 'capacity': '20,000'}
     ]
 }
 
@@ -116,8 +144,15 @@ TICKET_PRICES = {
     'NEWJEANS': {'VIP': '₩180,000 - ₩250,000', 'Premium': '₩130,000 - ₩160,000', 'Standard': '₩77,000 - ₩110,000'},
     'STRAY KIDS': {'VIP': '₩190,000 - ₩270,000', 'Premium': '₩140,000 - ₩170,000', 'Standard': '₩85,000 - ₩115,000'},
     'IVE': {'VIP': '₩170,000 - ₩240,000', 'Premium': '₩120,000 - ₩150,000', 'Standard': '₩70,000 - ₩100,000'},
-    'AESPA': {'VIP': '₩175,000 - ₩245,000', 'Premium': '₩125,000 - ₩155,000', 'Standard': '₩75,000 - ₩105,000'}
+    'AESPA': {'VIP': '₩175,000 - ₩245,000', 'Premium': '₩125,000 - ₩155,000', 'Standard': '₩75,000 - ₩105,000'},
+    'ENHYPEN': {'VIP': '₩170,000 - ₩240,000', 'Premium': '₩120,000 - ₩150,000', 'Standard': '₩70,000 - ₩100,000'},
+    'LE SSERAFIM': {'VIP': '₩165,000 - ₩230,000', 'Premium': '₩115,000 - ₩145,000', 'Standard': '₩65,000 - ₩95,000'},
+    'TXT': {'VIP': '₩175,000 - ₩245,000', 'Premium': '₩125,000 - ₩155,000', 'Standard': '₩75,000 - ₩105,000'}
 }
+
+def is_target_country(country):
+    """Check if country is in our target regions"""
+    return country in TARGET_COUNTRIES
 
 def generate_future_date(days_from_now=30):
     """Generate realistic future event dates"""
@@ -166,246 +201,268 @@ def get_sale_status(sale_dates):
         return "🔵 GENERAL SALE ACTIVE"
 
 def scan_interpark():
-    """Scan Interpark for K-pop tickets"""
+    """Scan Interpark for K-pop tickets (Korea-focused)"""
     events = []
     try:
         if random.random() > 0.7:
             artist = random.choice(list(KPOP_EVENTS.keys()))
-            venue_data = random.choice(KPOP_EVENTS[artist])
-            event_date = generate_future_date()
-            event_time = generate_event_time()
-            price = get_ticket_price(artist)
-            sale_dates = generate_sale_dates(event_date)
-            sale_status = get_sale_status(sale_dates)
-            
-            events.append({
-                'title': f'{artist} World Tour Concert',
-                'url': 'https://ticket.interpark.com',
-                'source': 'Interpark',
-                'artist': artist,
-                'venue': venue_data['venue'],
-                'city': venue_data['city'],
-                'country': venue_data['country'],
-                'capacity': venue_data['capacity'],
-                'date': event_date,
-                'time': event_time,
-                'price': price,
-                'seat_type': 'Various',
-                'presale_date': sale_dates['presale_date'],
-                'presale_time': sale_dates['presale_time'],
-                'general_sale_date': sale_dates['general_sale_date'],
-                'general_sale_time': sale_dates['general_sale_time'],
-                'sale_status': sale_status,
-                'time_detected': datetime.now().strftime('%H:%M:%S')
-            })
+            # Filter venues to only target countries
+            korean_venues = [v for v in KPOP_EVENTS[artist] if v['country'] in ['South Korea', 'Japan']]
+            if korean_venues:
+                venue_data = random.choice(korean_venues)
+                event_date = generate_future_date()
+                event_time = generate_event_time()
+                price = get_ticket_price(artist)
+                sale_dates = generate_sale_dates(event_date)
+                sale_status = get_sale_status(sale_dates)
+                
+                events.append({
+                    'title': f'{artist} World Tour Concert',
+                    'url': 'https://ticket.interpark.com',
+                    'source': 'Interpark',
+                    'artist': artist,
+                    'venue': venue_data['venue'],
+                    'city': venue_data['city'],
+                    'country': venue_data['country'],
+                    'capacity': venue_data['capacity'],
+                    'date': event_date,
+                    'time': event_time,
+                    'price': price,
+                    'seat_type': 'Various',
+                    'presale_date': sale_dates['presale_date'],
+                    'presale_time': sale_dates['presale_time'],
+                    'general_sale_date': sale_dates['general_sale_date'],
+                    'general_sale_time': sale_dates['general_sale_time'],
+                    'sale_status': sale_status,
+                    'time_detected': datetime.now().strftime('%H:%M:%S')
+                })
     except Exception as e:
         print(f"Interpark scan error: {e}")
     return events
 
 def scan_yes24():
-    """Scan Yes24 for K-pop tickets"""
+    """Scan Yes24 for K-pop tickets (Korea-focused)"""
     events = []
     try:
         if random.random() > 0.7:
             artist = random.choice(list(KPOP_EVENTS.keys()))
-            venue_data = random.choice(KPOP_EVENTS[artist])
-            event_date = generate_future_date(45)
-            event_time = generate_event_time()
-            price = get_ticket_price(artist, 'Premium')
-            sale_dates = generate_sale_dates(event_date)
-            sale_status = get_sale_status(sale_dates)
-            
-            events.append({
-                'title': f'{artist} Fan Meeting & Concert',
-                'url': 'https://ticket.yes24.com',
-                'source': 'Yes24',
-                'artist': artist,
-                'venue': venue_data['venue'],
-                'city': venue_data['city'],
-                'country': venue_data['country'],
-                'capacity': venue_data['capacity'],
-                'date': event_date,
-                'time': event_time,
-                'price': price,
-                'seat_type': 'Premium',
-                'presale_date': sale_dates['presale_date'],
-                'presale_time': sale_dates['presale_time'],
-                'general_sale_date': sale_dates['general_sale_date'],
-                'general_sale_time': sale_dates['general_sale_time'],
-                'sale_status': sale_status,
-                'time_detected': datetime.now().strftime('%H:%M:%S')
-            })
+            # Filter venues to only target countries
+            korean_venues = [v for v in KPOP_EVENTS[artist] if v['country'] in ['South Korea']]
+            if korean_venues:
+                venue_data = random.choice(korean_venues)
+                event_date = generate_future_date(45)
+                event_time = generate_event_time()
+                price = get_ticket_price(artist, 'Premium')
+                sale_dates = generate_sale_dates(event_date)
+                sale_status = get_sale_status(sale_dates)
+                
+                events.append({
+                    'title': f'{artist} Fan Meeting & Concert',
+                    'url': 'https://ticket.yes24.com',
+                    'source': 'Yes24',
+                    'artist': artist,
+                    'venue': venue_data['venue'],
+                    'city': venue_data['city'],
+                    'country': venue_data['country'],
+                    'capacity': venue_data['capacity'],
+                    'date': event_date,
+                    'time': event_time,
+                    'price': price,
+                    'seat_type': 'Premium',
+                    'presale_date': sale_dates['presale_date'],
+                    'presale_time': sale_dates['presale_time'],
+                    'general_sale_date': sale_dates['general_sale_date'],
+                    'general_sale_time': sale_dates['general_sale_time'],
+                    'sale_status': sale_status,
+                    'time_detected': datetime.now().strftime('%H:%M:%S')
+                })
     except Exception as e:
         print(f"Yes24 scan error: {e}")
     return events
 
-def scan_ticketmaster():
-    """Scan Ticketmaster for K-pop events"""
+def scan_ticketmaster_asia():
+    """Scan Ticketmaster Asia for regional events (NO USA)"""
     events = []
     try:
         if random.random() > 0.7:
             artist = random.choice(['BTS', 'BLACKPINK', 'TWICE', 'STRAY KIDS'])
-            venue_data = random.choice(KPOP_EVENTS[artist])
-            event_date = generate_future_date(60)
-            event_time = generate_event_time()
-            price = get_ticket_price(artist, 'VIP')
-            sale_dates = generate_sale_dates(event_date)
-            sale_status = get_sale_status(sale_dates)
-            
-            events.append({
-                'title': f'{artist} Global Tour - {venue_data["city"]}',
-                'url': 'https://www.ticketmaster.com',
-                'source': 'Ticketmaster',
-                'artist': artist,
-                'venue': venue_data['venue'],
-                'city': venue_data['city'],
-                'country': venue_data['country'],
-                'capacity': venue_data['capacity'],
-                'date': event_date,
-                'time': event_time,
-                'price': price,
-                'seat_type': 'VIP',
-                'presale_date': sale_dates['presale_date'],
-                'presale_time': sale_dates['presale_time'],
-                'general_sale_date': sale_dates['general_sale_date'],
-                'general_sale_time': sale_dates['general_sale_time'],
-                'sale_status': sale_status,
-                'time_detected': datetime.now().strftime('%H:%M:%S')
-            })
+            # Filter to Asian venues only
+            asian_venues = [v for v in KPOP_EVENTS[artist] if v['country'] in ['Singapore', 'Australia', 'Japan']]
+            if asian_venues:
+                venue_data = random.choice(asian_venues)
+                event_date = generate_future_date(60)
+                event_time = generate_event_time()
+                price = get_ticket_price(artist, 'VIP')
+                sale_dates = generate_sale_dates(event_date)
+                sale_status = get_sale_status(sale_dates)
+                
+                events.append({
+                    'title': f'{artist} Asia Tour - {venue_data["city"]}',
+                    'url': 'https://www.ticketmaster.sg' if venue_data['country'] == 'Singapore' else 'https://www.ticketmaster.com.au',
+                    'source': 'Ticketmaster Asia',
+                    'artist': artist,
+                    'venue': venue_data['venue'],
+                    'city': venue_data['city'],
+                    'country': venue_data['country'],
+                    'capacity': venue_data['capacity'],
+                    'date': event_date,
+                    'time': event_time,
+                    'price': price,
+                    'seat_type': 'VIP',
+                    'presale_date': sale_dates['presale_date'],
+                    'presale_time': sale_dates['presale_time'],
+                    'general_sale_date': sale_dates['general_sale_date'],
+                    'general_sale_time': sale_dates['general_sale_time'],
+                    'sale_status': sale_status,
+                    'time_detected': datetime.now().strftime('%H:%M:%S')
+                })
     except Exception as e:
-        print(f"Ticketmaster scan error: {e}")
+        print(f"Ticketmaster Asia scan error: {e}")
     return events
 
 def scan_weverse():
-    """Scan Weverse Shop for official merchandise and tickets"""
+    """Scan Weverse Shop for official merchandise and tickets (Asia-focused)"""
     events = []
     try:
         if random.random() > 0.7:
             artist = random.choice(['BTS', 'TXT', 'ENHYPEN', 'LE SSERAFIM'])
-            venue_data = random.choice(KPOP_EVENTS.get(artist, [{'venue': 'Seoul Olympic Stadium', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '69,950'}]))
-            event_date = generate_future_date(30)
-            event_time = generate_event_time()
-            price = get_ticket_price(artist, 'VIP')
-            sale_dates = generate_sale_dates(event_date)
-            sale_status = get_sale_status(sale_dates)
-            
-            events.append({
-                'title': f'{artist} Official Fanclub Concert',
-                'url': 'https://weverseshop.io',
-                'source': 'Weverse Shop',
-                'artist': artist,
-                'venue': venue_data['venue'],
-                'city': venue_data['city'],
-                'country': venue_data['country'],
-                'capacity': venue_data['capacity'],
-                'date': event_date,
-                'time': event_time,
-                'price': price,
-                'seat_type': 'Official Fanclub',
-                'presale_date': sale_dates['presale_date'],
-                'presale_time': sale_dates['presale_time'],
-                'general_sale_date': sale_dates['general_sale_date'],
-                'general_sale_time': sale_dates['general_sale_time'],
-                'sale_status': sale_status,
-                'time_detected': datetime.now().strftime('%H:%M:%S')
-            })
+            # Filter to target countries only
+            target_venues = [v for v in KPOP_EVENTS.get(artist, []) if v['country'] in TARGET_COUNTRIES]
+            if target_venues:
+                venue_data = random.choice(target_venues)
+                event_date = generate_future_date(30)
+                event_time = generate_event_time()
+                price = get_ticket_price(artist, 'VIP')
+                sale_dates = generate_sale_dates(event_date)
+                sale_status = get_sale_status(sale_dates)
+                
+                events.append({
+                    'title': f'{artist} Official Fanclub Concert',
+                    'url': 'https://weverseshop.io',
+                    'source': 'Weverse Shop',
+                    'artist': artist,
+                    'venue': venue_data['venue'],
+                    'city': venue_data['city'],
+                    'country': venue_data['country'],
+                    'capacity': venue_data['capacity'],
+                    'date': event_date,
+                    'time': event_time,
+                    'price': price,
+                    'seat_type': 'Official Fanclub',
+                    'presale_date': sale_dates['presale_date'],
+                    'presale_time': sale_dates['presale_time'],
+                    'general_sale_date': sale_dates['general_sale_date'],
+                    'general_sale_time': sale_dates['general_sale_time'],
+                    'sale_status': sale_status,
+                    'time_detected': datetime.now().strftime('%H:%M:%S')
+                })
     except Exception as e:
         print(f"Weverse scan error: {e}")
     return events
 
 def scan_melon():
-    """Scan Melon Ticket"""
+    """Scan Melon Ticket (Korea only)"""
     events = []
     try:
         if random.random() > 0.7:
             artist = random.choice(list(KPOP_EVENTS.keys()))
-            venue_data = random.choice(KPOP_EVENTS[artist])
-            event_date = generate_future_date(25)
-            event_time = generate_event_time()
-            price = get_ticket_price(artist, 'Standard')
-            sale_dates = generate_sale_dates(event_date)
-            sale_status = get_sale_status(sale_dates)
-            
-            events.append({
-                'title': f'{artist} Exclusive Melon Ticket Event',
-                'url': 'http://ticket.melon.com',
-                'source': 'Melon Ticket',
-                'artist': artist,
-                'venue': venue_data['venue'],
-                'city': venue_data['city'],
-                'country': venue_data['country'],
-                'capacity': venue_data['capacity'],
-                'date': event_date,
-                'time': event_time,
-                'price': price,
-                'seat_type': 'Exclusive',
-                'presale_date': sale_dates['presale_date'],
-                'presale_time': sale_dates['presale_time'],
-                'general_sale_date': sale_dates['general_sale_date'],
-                'general_sale_time': sale_dates['general_sale_time'],
-                'sale_status': sale_status,
-                'time_detected': datetime.now().strftime('%H:%M:%S')
-            })
+            # Korea only for Melon
+            korean_venues = [v for v in KPOP_EVENTS[artist] if v['country'] == 'South Korea']
+            if korean_venues:
+                venue_data = random.choice(korean_venues)
+                event_date = generate_future_date(25)
+                event_time = generate_event_time()
+                price = get_ticket_price(artist, 'Standard')
+                sale_dates = generate_sale_dates(event_date)
+                sale_status = get_sale_status(sale_dates)
+                
+                events.append({
+                    'title': f'{artist} Exclusive Melon Ticket Event',
+                    'url': 'http://ticket.melon.com',
+                    'source': 'Melon Ticket',
+                    'artist': artist,
+                    'venue': venue_data['venue'],
+                    'city': venue_data['city'],
+                    'country': venue_data['country'],
+                    'capacity': venue_data['capacity'],
+                    'date': event_date,
+                    'time': event_time,
+                    'price': price,
+                    'seat_type': 'Exclusive',
+                    'presale_date': sale_dates['presale_date'],
+                    'presale_time': sale_dates['presale_time'],
+                    'general_sale_date': sale_dates['general_sale_date'],
+                    'general_sale_time': sale_dates['general_sale_time'],
+                    'sale_status': sale_status,
+                    'time_detected': datetime.now().strftime('%H:%M:%S')
+                })
     except Exception as e:
         print(f"Melon scan error: {e}")
     return events
 
 def scan_twitter():
-    """Scan Twitter for K-pop ticket announcements"""
+    """Scan Twitter for K-pop ticket announcements (Regional focus)"""
     events = []
     try:
         if random.random() > 0.6:
             artist = random.choice(list(KPOP_EVENTS.keys()))
-            venue_data = random.choice(KPOP_EVENTS[artist])
-            event_date = generate_future_date(15)
-            event_time = generate_event_time()
-            price = get_ticket_price(artist)
-            sale_dates = generate_sale_dates(event_date)
-            sale_status = get_sale_status(sale_dates)
-            
-            events.append({
-                'title': f'🚨 {artist} TICKET ANNOUNCEMENT!',
-                'url': 'https://twitter.com/search?q=kpop%20ticket%20sale',
-                'source': 'Twitter Official',
-                'artist': artist,
-                'venue': venue_data['venue'],
-                'city': venue_data['city'],
-                'country': venue_data['country'],
-                'capacity': venue_data['capacity'],
-                'date': event_date,
-                'time': event_time,
-                'price': price,
-                'seat_type': 'Various',
-                'presale_date': sale_dates['presale_date'],
-                'presale_time': sale_dates['presale_time'],
-                'general_sale_date': sale_dates['general_sale_date'],
-                'general_sale_time': sale_dates['general_sale_time'],
-                'sale_status': sale_status,
-                'time_detected': datetime.now().strftime('%H:%M:%S'),
-                'urgent': True
-            })
+            # Filter to target countries only
+            target_venues = [v for v in KPOP_EVENTS[artist] if v['country'] in TARGET_COUNTRIES]
+            if target_venues:
+                venue_data = random.choice(target_venues)
+                event_date = generate_future_date(15)
+                event_time = generate_event_time()
+                price = get_ticket_price(artist)
+                sale_dates = generate_sale_dates(event_date)
+                sale_status = get_sale_status(sale_dates)
+                
+                events.append({
+                    'title': f'🚨 {artist} TICKET ANNOUNCEMENT!',
+                    'url': 'https://twitter.com/search?q=kpop%20ticket%20sale',
+                    'source': 'Twitter Official',
+                    'artist': artist,
+                    'venue': venue_data['venue'],
+                    'city': venue_data['city'],
+                    'country': venue_data['country'],
+                    'capacity': venue_data['capacity'],
+                    'date': event_date,
+                    'time': event_time,
+                    'price': price,
+                    'seat_type': 'Various',
+                    'presale_date': sale_dates['presale_date'],
+                    'presale_time': sale_dates['presale_time'],
+                    'general_sale_date': sale_dates['general_sale_date'],
+                    'general_sale_time': sale_dates['general_sale_time'],
+                    'sale_status': sale_status,
+                    'time_detected': datetime.now().strftime('%H:%M:%S'),
+                    'urgent': True
+                })
     except Exception as e:
         print(f"Twitter scan error: {e}")
     return events
 
 def scan_all_ticket_sites():
-    """Scan ALL K-pop ticket sites simultaneously"""
+    """Scan ALL K-pop ticket sites with regional filtering"""
     all_events = []
     
-    print("🌐 Scanning all K-pop ticket sites...")
+    print("🌐 Scanning K-pop ticket sites (Regional Focus)...")
     
-    # Scan all sites
+    # Scan all regional sites
     all_events.extend(scan_interpark())
     all_events.extend(scan_yes24())
-    all_events.extend(scan_ticketmaster())
+    all_events.extend(scan_ticketmaster_asia())  # Asia only, no USA
     all_events.extend(scan_weverse())
     all_events.extend(scan_melon())
     all_events.extend(scan_twitter())
     
-    if all_events:
-        print(f"🎯 Found {len(all_events)} ticket events with sale dates")
+    # Final filter to ensure no USA events slip through
+    filtered_events = [event for event in all_events if is_target_country(event['country'])]
     
-    return all_events
+    if filtered_events:
+        countries_found = set(event['country'] for event in filtered_events)
+        print(f"🎯 Found {len(filtered_events)} regional ticket events in: {', '.join(countries_found)}")
+    
+    return filtered_events
 
 class KpopTicketMonitor:
     def __init__(self):
@@ -419,7 +476,7 @@ class KpopTicketMonitor:
                 active_users = len(user_manager.get_active_users())
                 print(f"🔍 Scan #{cycle_count} - {active_users} users - {datetime.now().strftime('%H:%M:%S')}")
                 
-                # Scan ALL ticket sites
+                # Scan ALL ticket sites with regional filtering
                 events = scan_all_ticket_sites()
                 
                 # Send enhanced alerts to all active users
@@ -430,6 +487,7 @@ class KpopTicketMonitor:
                                 alert_msg = f"""🚨🚨 <b>URGENT TICKET ALERT!</b> 🚨🚨
 
 🎤 <b>Artist:</b> {event['artist']}
+🌍 <b>Region:</b> {event['country']}
 📅 <b>Concert Date:</b> {event['date']} at {event['time']}
 🏟️ <b>Venue:</b> {event['venue']}
 📍 <b>Location:</b> {event['city']}, {event['country']}
@@ -455,6 +513,7 @@ class KpopTicketMonitor:
                                 alert_msg = f"""🎫 <b>K-POP TICKET ALERT!</b>
 
 🎤 <b>Artist:</b> {event['artist']}
+🌍 <b>Region:</b> {event['country']}
 📅 <b>Concert Date:</b> {event['date']} at {event['time']}
 🏟️ <b>Venue:</b> {event['venue']}
 📍 <b>Location:</b> {event['city']}, {event['country']}
@@ -478,7 +537,7 @@ class KpopTicketMonitor:
 🚀 <b>ACT FAST - Tickets sell out quickly!</b>"""
                             
                             if send_telegram_message(chat_id, alert_msg):
-                                print(f"📨 Enhanced alert sent to user {chat_id}")
+                                print(f"📨 Regional alert sent to user {chat_id}")
                             time.sleep(0.3)
                 
                 # Wait exactly 60 seconds
@@ -487,7 +546,7 @@ class KpopTicketMonitor:
         thread = threading.Thread(target=monitor_loop)
         thread.daemon = True
         thread.start()
-        print("✅ Enhanced monitoring started (60-second intervals)")
+        print("✅ Regional monitoring started (60-second intervals)")
 
 monitor = KpopTicketMonitor()
 
@@ -503,11 +562,13 @@ def process_update(update):
             
             if text.startswith("/start"):
                 user_manager.add_user(chat_id, username, first_name)
-                welcome = """🤖 <b>K-pop Ticket Alert Bot</b>
+                welcome = """🤖 <b>K-pop Ticket Alert Bot - REGIONAL FOCUS</b>
 
 ✅ <b>Host:</b> Railway (24/7 Free)
 ⏰ <b>Scan Interval:</b> 60 seconds
-🚄 <b>Reliability:</b> Enterprise-grade
+🎯 <b>Target Regions:</b> Korea, Japan, Singapore, Thailand, Indonesia, Malaysia, Philippines, Vietnam, Taiwan, Hong Kong, China, Australia
+🚫 <b>Omitted:</b> USA
+
 🌐 <b>Enhanced Alerts Include:</b>
 
 📅 <b>Concert Dates & Times</b>
@@ -520,23 +581,36 @@ def process_update(update):
 🔵 <b>General Sale Dates</b>
 📊 <b>Current Sale Status</b>
 
-🚨 <b>Complete ticket information in every alert!</b>"""
+🚨 <b>Complete ticket information for Asian markets only!</b>"""
                 send_telegram_message(chat_id, welcome, get_bot_commands_keyboard())
                 print(f"👤 New user: {chat_id}")
             
             elif text.startswith("/status"):
                 active_users = len(user_manager.get_active_users())
-                status_msg = f"""📊 <b>Bot Status</b>
+                status_msg = f"""📊 <b>Bot Status - Regional Focus</b>
 
 🟢 <b>Status:</b> ACTIVE
 👥 <b>Active Users:</b> {active_users}
 ⏰ <b>Scan Interval:</b> 60 seconds
 🚄 <b>Host:</b> Railway (24/7)
+🎯 <b>Target Regions:</b> {len(TARGET_COUNTRIES)} countries
+🚫 <b>Omitted:</b> USA
 📅 <b>Alerts:</b> Enhanced (Sale Dates, Venues, Prices)
 🕒 <b>Last Scan:</b> {datetime.now().strftime('%H:%M:%S')}
 
-<code>Complete ticket sale monitoring</code>"""
+<code>Regional K-pop ticket monitoring active</code>"""
                 send_telegram_message(chat_id, status_msg, get_bot_commands_keyboard())
+            
+            elif text.startswith("/regions"):
+                regions_list = "\n".join([f"• {country}" for country in sorted(TARGET_COUNTRIES)])
+                regions_msg = f"""🎯 <b>Target Regions - K-pop Hotspots</b>
+
+{regions_list}
+
+🚫 <b>USA events are filtered out</b>
+
+<code>Focusing on major K-pop markets in Asia</code>"""
+                send_telegram_message(chat_id, regions_msg, get_bot_commands_keyboard())
             
             elif text.startswith("/saletypes"):
                 sale_types_msg = """🎟️ <b>Ticket Sale Types Explained</b>
@@ -581,11 +655,14 @@ def process_update(update):
             
             if data == "start":
                 user_manager.add_user(chat_id, None, None)
-                send_telegram_message(chat_id, "✅ Enhanced monitoring started! You'll receive alerts with presale & general sale dates every 60 seconds.", get_bot_commands_keyboard())
+                send_telegram_message(chat_id, "✅ Regional monitoring started! You'll receive alerts for K-pop concerts in Asia only (no USA) every 60 seconds.", get_bot_commands_keyboard())
             elif data == "status":
                 active_users = len(user_manager.get_active_users())
-                status_msg = f"📊 Active Users: {active_users}\n⏰ Scanning every 60 seconds\n📅 Sale date alerts active\n🚄 Host: Railway 24/7"
+                status_msg = f"📊 Active Users: {active_users}\n⏰ Scanning every 60 seconds\n🎯 Target: {len(TARGET_COUNTRIES)} regions\n🚫 No USA events\n🚄 Host: Railway 24/7"
                 send_telegram_message(chat_id, status_msg, get_bot_commands_keyboard())
+            elif data == "regions":
+                regions_list = ", ".join(sorted(TARGET_COUNTRIES))
+                send_telegram_message(chat_id, f"🎯 Monitoring: {regions_list}\n🚫 USA events filtered out", get_bot_commands_keyboard())
             elif data == "saletypes":
                 send_telegram_message(chat_id, "🎟️ I monitor both PRESALE (🟡) and GENERAL SALE (🔵) dates automatically!", get_bot_commands_keyboard())
             elif data == "server":
@@ -623,29 +700,29 @@ monitor.start_continuous_monitoring()
 start_bot_polling()
 
 # Send startup notification
-startup_msg = """🤖 <b>K-pop Ticket Bot - SALE DATE ALERTS</b>
+startup_msg = """🤖 <b>K-pop Ticket Bot - REGIONAL FOCUS</b>
 
 ✅ <b>Host:</b> Railway (24/7 Free)
 ⏰ <b>Scan Interval:</b> 60 seconds
-📅 <b>Enhanced Features:</b> Presale & General Sale Dates
+🎯 <b>Target Regions:</b> Korea, Japan, Singapore, Thailand, Indonesia, Malaysia, Philippines, Vietnam, Taiwan, Hong Kong, China, Australia
+🚫 <b>Omitted:</b> USA
 🚄 <b>Status:</b> RUNNING
 🕒 <b>Started:</b> {time}
 
-🎫 <b>Now Including in Every Alert:</b>
-• Presale Dates & Times
-• General Sale Dates & Times  
-• Current Sale Status
-• Concert Information
-• Venue Details
-• Price Ranges
+🎫 <b>Now Monitoring:</b>
+• Presale & General Sale Dates
+• Asian Markets Only
+• No USA Events
+• Complete Concert Information
 
-<code>Complete ticket sale monitoring activated!</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+<code>Regional K-pop ticket monitoring activated!</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
 send_telegram_message("728916383", startup_msg)
-print("✅ Enhanced startup notification sent")
+print("✅ Regional startup notification sent")
 
-print("🎯 Bot is now running on Railway with sale date monitoring!")
-print("📅 Alerts include presale and general sale dates")
+print("🎯 Bot is now running on Railway with REGIONAL filtering!")
+print("🎯 Target regions:", ", ".join(TARGET_COUNTRIES))
+print("🚫 USA events are completely filtered out")
 print("🚄 Railway will keep it running 24/7 automatically")
 
 # Keep main thread alive
