@@ -432,7 +432,7 @@ def process_update(update):
 🎟️ <b>Seat Types</b>
 👥 <b>Venue Capacity</b>
 
-🚨 <b>Complete concert information in every alert!</b>"""
+🚨 <b>Complete concert information in every alert! Built & Powered By @BrainyError</b>"""
                 send_telegram_message(chat_id, welcome, get_bot_commands_keyboard())
                 print(f"👤 New user: {chat_id}")
             
@@ -555,7 +555,7 @@ startup_msg = """🤖 <b>K-pop Ticket Bot - ENHANCED ALERTS</b>
 • Seat Types
 • Capacity Data
 
-<code>Complete concert information monitoring activated!</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+<code>Complete concert information monitoring activated! Built & Powered By @BrainyError</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
 send_telegram_message("728916383", startup_msg)
 print("✅ Enhanced startup notification sent")
