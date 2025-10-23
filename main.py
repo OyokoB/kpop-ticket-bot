@@ -4,6 +4,7 @@ import time
 import threading
 from datetime import datetime, timedelta
 import random
+import hashlib
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8200373621:AAHXaKktV6DnoELQniVPRTTFG50Wv1dZ5pA")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "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")
@@ -19,6 +20,7 @@ print("🎵 K-pop Ticket Bot Starting on Railway...")
 print("⏰ Scan Interval: 60 SECONDS")
 print("🎯 TARGET REGIONS:", ", ".join(TARGET_COUNTRIES))
 print("🚫 OMITTED: USA")
+print("🔄 DUPLICATE PREVENTION: 1 HOUR")
 print("🚄 Host: Railway (24/7 Free)")
 print("=" * 50)
 
@@ -40,7 +42,47 @@ class UserManager:
     def get_active_users(self):
         return [chat_id for chat_id, user_data in self.users.items() if user_data.get('is_active', True)]
 
+class EventManager:
+    def __init__(self):
+        self.sent_events = {}  # event_hash -> sent_time
+        self.duplicate_window = 3600  # 1 hour in seconds
+    
+    def generate_event_hash(self, event):
+        """Generate unique hash for event to detect duplicates"""
+        event_string = f"{event['artist']}_{event['venue']}_{event['date']}_{event['city']}_{event['country']}"
+        return hashlib.md5(event_string.encode()).hexdigest()
+    
+    def is_duplicate_event(self, event):
+        """Check if event was sent in the last hour"""
+        event_hash = self.generate_event_hash(event)
+        
+        if event_hash in self.sent_events:
+            time_since_sent = time.time() - self.sent_events[event_hash]
+            if time_since_sent < self.duplicate_window:
+                print(f"🔄 Skipping duplicate event: {event['artist']} at {event['venue']} ({int(time_since_sent)}s ago)")
+                return True
+        
+        # Not a duplicate or older than 1 hour
+        self.sent_events[event_hash] = time.time()
+        return False
+    
+    def cleanup_old_events(self):
+        """Remove events older than duplicate window"""
+        current_time = time.time()
+        old_hashes = []
+        
+        for event_hash, sent_time in self.sent_events.items():
+            if current_time - sent_time > self.duplicate_window:
+                old_hashes.append(event_hash)
+        
+        for event_hash in old_hashes:
+            del self.sent_events[event_hash]
+        
+        if old_hashes:
+            print(f"🧹 Cleaned up {len(old_hashes)} old events from memory")
+
 user_manager = UserManager()
+event_manager = EventManager()
 
 def send_telegram_message(chat_id, message, reply_markup=None):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -67,6 +109,7 @@ def get_bot_commands_keyboard():
             [{"text": "📊 Status", "callback_data": "status"}],
             [{"text": "🎯 Target Regions", "callback_data": "regions"}],
             [{"text": "📅 Sale Types", "callback_data": "saletypes"}],
+            [{"text": "🔄 Duplicate Filter", "callback_data": "duplicates"}],
             [{"text": "🚄 Server Info", "callback_data": "server"}]
         ]
     }
@@ -216,7 +259,7 @@ def scan_interpark():
                 sale_dates = generate_sale_dates(event_date)
                 sale_status = get_sale_status(sale_dates)
                 
-                events.append({
+                event = {
                     'title': f'{artist} World Tour Concert',
                     'url': 'https://ticket.interpark.com',
                     'source': 'Interpark',
@@ -235,7 +278,13 @@ def scan_interpark():
                     'general_sale_time': sale_dates['general_sale_time'],
                     'sale_status': sale_status,
                     'time_detected': datetime.now().strftime('%H:%M:%S')
-                })
+                }
+                
+                # Check for duplicates before adding
+                if not event_manager.is_duplicate_event(event):
+                    events.append(event)
+                else:
+                    print(f"🔄 Interpark: Skipping duplicate {artist} at {venue_data['venue']}")
     except Exception as e:
         print(f"Interpark scan error: {e}")
     return events
@@ -256,7 +305,7 @@ def scan_yes24():
                 sale_dates = generate_sale_dates(event_date)
                 sale_status = get_sale_status(sale_dates)
                 
-                events.append({
+                event = {
                     'title': f'{artist} Fan Meeting & Concert',
                     'url': 'https://ticket.yes24.com',
                     'source': 'Yes24',
@@ -275,7 +324,13 @@ def scan_yes24():
                     'general_sale_time': sale_dates['general_sale_time'],
                     'sale_status': sale_status,
                     'time_detected': datetime.now().strftime('%H:%M:%S')
-                })
+                }
+                
+                # Check for duplicates before adding
+                if not event_manager.is_duplicate_event(event):
+                    events.append(event)
+                else:
+                    print(f"🔄 Yes24: Skipping duplicate {artist} at {venue_data['venue']}")
     except Exception as e:
         print(f"Yes24 scan error: {e}")
     return events
@@ -296,7 +351,7 @@ def scan_ticketmaster_asia():
                 sale_dates = generate_sale_dates(event_date)
                 sale_status = get_sale_status(sale_dates)
                 
-                events.append({
+                event = {
                     'title': f'{artist} Asia Tour - {venue_data["city"]}',
                     'url': 'https://www.ticketmaster.sg' if venue_data['country'] == 'Singapore' else 'https://www.ticketmaster.com.au',
                     'source': 'Ticketmaster Asia',
@@ -315,7 +370,13 @@ def scan_ticketmaster_asia():
                     'general_sale_time': sale_dates['general_sale_time'],
                     'sale_status': sale_status,
                     'time_detected': datetime.now().strftime('%H:%M:%S')
-                })
+                }
+                
+                # Check for duplicates before adding
+                if not event_manager.is_duplicate_event(event):
+                    events.append(event)
+                else:
+                    print(f"🔄 Ticketmaster Asia: Skipping duplicate {artist} at {venue_data['venue']}")
     except Exception as e:
         print(f"Ticketmaster Asia scan error: {e}")
     return events
@@ -336,7 +397,7 @@ def scan_weverse():
                 sale_dates = generate_sale_dates(event_date)
                 sale_status = get_sale_status(sale_dates)
                 
-                events.append({
+                event = {
                     'title': f'{artist} Official Fanclub Concert',
                     'url': 'https://weverseshop.io',
                     'source': 'Weverse Shop',
@@ -355,7 +416,13 @@ def scan_weverse():
                     'general_sale_time': sale_dates['general_sale_time'],
                     'sale_status': sale_status,
                     'time_detected': datetime.now().strftime('%H:%M:%S')
-                })
+                }
+                
+                # Check for duplicates before adding
+                if not event_manager.is_duplicate_event(event):
+                    events.append(event)
+                else:
+                    print(f"🔄 Weverse: Skipping duplicate {artist} at {venue_data['venue']}")
     except Exception as e:
         print(f"Weverse scan error: {e}")
     return events
@@ -376,7 +443,7 @@ def scan_melon():
                 sale_dates = generate_sale_dates(event_date)
                 sale_status = get_sale_status(sale_dates)
                 
-                events.append({
+                event = {
                     'title': f'{artist} Exclusive Melon Ticket Event',
                     'url': 'http://ticket.melon.com',
                     'source': 'Melon Ticket',
@@ -395,7 +462,13 @@ def scan_melon():
                     'general_sale_time': sale_dates['general_sale_time'],
                     'sale_status': sale_status,
                     'time_detected': datetime.now().strftime('%H:%M:%S')
-                })
+                }
+                
+                # Check for duplicates before adding
+                if not event_manager.is_duplicate_event(event):
+                    events.append(event)
+                else:
+                    print(f"🔄 Melon: Skipping duplicate {artist} at {venue_data['venue']}")
     except Exception as e:
         print(f"Melon scan error: {e}")
     return events
@@ -416,7 +489,7 @@ def scan_twitter():
                 sale_dates = generate_sale_dates(event_date)
                 sale_status = get_sale_status(sale_dates)
                 
-                events.append({
+                event = {
                     'title': f'🚨 {artist} TICKET ANNOUNCEMENT!',
                     'url': 'https://twitter.com/search?q=kpop%20ticket%20sale',
                     'source': 'Twitter Official',
@@ -436,21 +509,30 @@ def scan_twitter():
                     'sale_status': sale_status,
                     'time_detected': datetime.now().strftime('%H:%M:%S'),
                     'urgent': True
-                })
+                }
+                
+                # Check for duplicates before adding
+                if not event_manager.is_duplicate_event(event):
+                    events.append(event)
+                else:
+                    print(f"🔄 Twitter: Skipping duplicate {artist} at {venue_data['venue']}")
     except Exception as e:
         print(f"Twitter scan error: {e}")
     return events
 
 def scan_all_ticket_sites():
-    """Scan ALL K-pop ticket sites with regional filtering"""
+    """Scan ALL K-pop ticket sites with regional filtering and duplicate prevention"""
     all_events = []
     
-    print("🌐 Scanning K-pop ticket sites (Regional Focus)...")
+    print("🌐 Scanning K-pop ticket sites (Regional + Duplicate Filter)...")
+    
+    # Clean up old events first
+    event_manager.cleanup_old_events()
     
     # Scan all regional sites
     all_events.extend(scan_interpark())
     all_events.extend(scan_yes24())
-    all_events.extend(scan_ticketmaster_asia())  # Asia only, no USA
+    all_events.extend(scan_ticketmaster_asia())
     all_events.extend(scan_weverse())
     all_events.extend(scan_melon())
     all_events.extend(scan_twitter())
@@ -460,7 +542,7 @@ def scan_all_ticket_sites():
     
     if filtered_events:
         countries_found = set(event['country'] for event in filtered_events)
-        print(f"🎯 Found {len(filtered_events)} regional ticket events in: {', '.join(countries_found)}")
+        print(f"🎯 Found {len(filtered_events)} new regional ticket events in: {', '.join(countries_found)}")
     
     return filtered_events
 
@@ -476,7 +558,7 @@ class KpopTicketMonitor:
                 active_users = len(user_manager.get_active_users())
                 print(f"🔍 Scan #{cycle_count} - {active_users} users - {datetime.now().strftime('%H:%M:%S')}")
                 
-                # Scan ALL ticket sites with regional filtering
+                # Scan ALL ticket sites with regional filtering and duplicate prevention
                 events = scan_all_ticket_sites()
                 
                 # Send enhanced alerts to all active users
@@ -506,6 +588,7 @@ class KpopTicketMonitor:
 🔗 <b>Link:</b> {event['url']}
 
 ⏰ <b>Alert Time:</b> {event['time_detected']}
+🔄 <b>Duplicate Protection:</b> 1 Hour
 🚄 <b>Server:</b> Railway (24/7)
 
 🚀 <b>ACT IMMEDIATELY!</b>"""
@@ -532,12 +615,13 @@ class KpopTicketMonitor:
 🔗 <b>Link:</b> {event['url']}
 
 ⏰ <b>Alert Time:</b> {event['time_detected']}
+🔄 <b>Duplicate Protection:</b> 1 Hour
 🚄 <b>Server:</b> Railway (24/7)
 
 🚀 <b>ACT FAST - Tickets sell out quickly!</b>"""
                             
                             if send_telegram_message(chat_id, alert_msg):
-                                print(f"📨 Regional alert sent to user {chat_id}")
+                                print(f"📨 New alert sent to user {chat_id} - {event['artist']} at {event['venue']}")
                             time.sleep(0.3)
                 
                 # Wait exactly 60 seconds
@@ -546,7 +630,7 @@ class KpopTicketMonitor:
         thread = threading.Thread(target=monitor_loop)
         thread.daemon = True
         thread.start()
-        print("✅ Regional monitoring started (60-second intervals)")
+        print("✅ Enhanced monitoring started (60-second intervals + 1hr duplicate protection)")
 
 monitor = KpopTicketMonitor()
 
@@ -568,6 +652,7 @@ def process_update(update):
 ⏰ <b>Scan Interval:</b> 60 seconds
 🎯 <b>Target Regions:</b> Korea, Japan, Singapore, Thailand, Indonesia, Malaysia, Philippines, Vietnam, Taiwan, Hong Kong, China, Australia
 🚫 <b>Omitted:</b> USA
+🔄 <b>Duplicate Protection:</b> 1 Hour
 
 🌐 <b>Enhanced Alerts Include:</b>
 
@@ -581,12 +666,13 @@ def process_update(update):
 🔵 <b>General Sale Dates</b>
 📊 <b>Current Sale Status</b>
 
-🚨 <b>Complete ticket information for Asian markets only! ©2025 @BrainyError</b>"""
+🚨 <b>No repeat alerts for 1 hour - Clean notifications!</b>"""
                 send_telegram_message(chat_id, welcome, get_bot_commands_keyboard())
                 print(f"👤 New user: {chat_id}")
             
             elif text.startswith("/status"):
                 active_users = len(user_manager.get_active_users())
+                tracked_events = len(event_manager.sent_events)
                 status_msg = f"""📊 <b>Bot Status - Regional Focus</b>
 
 🟢 <b>Status:</b> ACTIVE
@@ -595,10 +681,11 @@ def process_update(update):
 🚄 <b>Host:</b> Railway (24/7)
 🎯 <b>Target Regions:</b> {len(TARGET_COUNTRIES)} countries
 🚫 <b>Omitted:</b> USA
-📅 <b>Alerts:</b> Enhanced (Sale Dates, Venues, Prices)
+🔄 <b>Tracked Events:</b> {tracked_events}
+📅 <b>Duplicate Protection:</b> 1 Hour
 🕒 <b>Last Scan:</b> {datetime.now().strftime('%H:%M:%S')}
 
-<code>Regional K-pop ticket monitoring active</code>"""
+<code>Smart monitoring with duplicate prevention</code>"""
                 send_telegram_message(chat_id, status_msg, get_bot_commands_keyboard())
             
             elif text.startswith("/regions"):
@@ -611,6 +698,24 @@ def process_update(update):
 
 <code>Focusing on major K-pop markets in Asia</code>"""
                 send_telegram_message(chat_id, regions_msg, get_bot_commands_keyboard())
+            
+            elif text.startswith("/duplicates"):
+                tracked_count = len(event_manager.sent_events)
+                duplicates_msg = f"""🔄 <b>Duplicate Event Protection</b>
+
+✅ <b>Status:</b> ACTIVE
+⏰ <b>Protection Window:</b> 1 Hour
+📊 <b>Currently Tracking:</b> {tracked_count} events
+🕒 <b>Auto Cleanup:</b> Every scan cycle
+
+<b>How it works:</b>
+• Each event is tracked by artist + venue + date + location
+• Same event won't alert again for 1 hour
+• Prevents spam from multiple ticket sites
+• Automatic memory cleanup
+
+<code>Clean, non-repetitive alerts guaranteed</code>"""
+                send_telegram_message(chat_id, duplicates_msg, get_bot_commands_keyboard())
             
             elif text.startswith("/saletypes"):
                 sale_types_msg = """🎟️ <b>Ticket Sale Types Explained</b>
@@ -655,14 +760,18 @@ def process_update(update):
             
             if data == "start":
                 user_manager.add_user(chat_id, None, None)
-                send_telegram_message(chat_id, "✅ Regional monitoring started! You'll receive alerts for K-pop concerts in Asia only (no USA) every 60 seconds.", get_bot_commands_keyboard())
+                send_telegram_message(chat_id, "✅ Smart monitoring started! You'll receive alerts for K-pop concerts in Asia only (no USA) with 1-hour duplicate protection.", get_bot_commands_keyboard())
             elif data == "status":
                 active_users = len(user_manager.get_active_users())
-                status_msg = f"📊 Active Users: {active_users}\n⏰ Scanning every 60 seconds\n🎯 Target: {len(TARGET_COUNTRIES)} regions\n🚫 No USA events\n🚄 Host: Railway 24/7"
+                tracked_events = len(event_manager.sent_events)
+                status_msg = f"📊 Active Users: {active_users}\n⏰ Scanning every 60 seconds\n🎯 Target: {len(TARGET_COUNTRIES)} regions\n🚫 No USA events\n🔄 Tracking: {tracked_events} events\n🕒 Duplicate protection: 1 hour"
                 send_telegram_message(chat_id, status_msg, get_bot_commands_keyboard())
             elif data == "regions":
                 regions_list = ", ".join(sorted(TARGET_COUNTRIES))
                 send_telegram_message(chat_id, f"🎯 Monitoring: {regions_list}\n🚫 USA events filtered out", get_bot_commands_keyboard())
+            elif data == "duplicates":
+                tracked_count = len(event_manager.sent_events)
+                send_telegram_message(chat_id, f"🔄 Duplicate protection: 1 HOUR\n📊 Currently tracking: {tracked_count} events\n✅ No repeat alerts for same event", get_bot_commands_keyboard())
             elif data == "saletypes":
                 send_telegram_message(chat_id, "🎟️ I monitor both PRESALE (🟡) and GENERAL SALE (🔵) dates automatically!", get_bot_commands_keyboard())
             elif data == "server":
@@ -700,29 +809,32 @@ monitor.start_continuous_monitoring()
 start_bot_polling()
 
 # Send startup notification
-startup_msg = """🤖 <b>K-pop Ticket Bot - REGIONAL FOCUS</b>
+startup_msg = """🤖 <b>K-pop Ticket Bot - SMART MONITORING</b>
 
 ✅ <b>Host:</b> Railway (24/7 Free)
 ⏰ <b>Scan Interval:</b> 60 seconds
 🎯 <b>Target Regions:</b> Korea, Japan, Singapore, Thailand, Indonesia, Malaysia, Philippines, Vietnam, Taiwan, Hong Kong, China, Australia
 🚫 <b>Omitted:</b> USA
+🔄 <b>Duplicate Protection:</b> 1 HOUR
 🚄 <b>Status:</b> RUNNING
 🕒 <b>Started:</b> {time}
 
-🎫 <b>Now Monitoring:</b>
-• Presale & General Sale Dates
-• Asian Markets Only
-• No USA Events
-• Complete Concert Information
+🎫 <b>Smart Features:</b>
+• Regional filtering (Asia only)
+• No USA events
+• 1-hour duplicate protection
+• Automatic memory cleanup
+• Clean, non-repetitive alerts
 
-<code>Regional K-pop ticket monitoring activated! ©2025 @BrainyError</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+<code>Advanced K-pop ticket monitoring activated! ©2025 @BrainyError</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
 send_telegram_message("728916383", startup_msg)
-print("✅ Regional startup notification sent")
+print("✅ Smart startup notification sent")
 
-print("🎯 Bot is now running on Railway with REGIONAL filtering!")
+print("🎯 Bot is now running on Railway with SMART filtering!")
 print("🎯 Target regions:", ", ".join(TARGET_COUNTRIES))
 print("🚫 USA events are completely filtered out")
+print("🔄 Duplicate protection: 1 HOUR - No repeat alerts")
 print("🚄 Railway will keep it running 24/7 automatically")
 
 # Keep main thread alive
@@ -730,6 +842,7 @@ try:
     while True:
         time.sleep(300)
         active_users = len(user_manager.get_active_users())
-        print(f"📊 Status: {active_users} active users - {datetime.now().strftime('%H:%M:%S')}")
+        tracked_events = len(event_manager.sent_events)
+        print(f"📊 Status: {active_users} users, {tracked_events} tracked events - {datetime.now().strftime('%H:%M:%S')}")
 except KeyboardInterrupt:
     print("\n🛑 Bot stopped")
