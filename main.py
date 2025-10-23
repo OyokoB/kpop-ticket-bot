@@ -9,17 +9,21 @@ import hashlib
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8200373621:AAHXaKktV6DnoELQniVPRTTFG50Wv1dZ5pA")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "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")
 
-# 🎯 TARGET REGIONS (K-pop popular countries - NO USA)
+# 🎯 TARGET REGIONS (K-pop popular countries - NO USA, NO AUSTRALIA)
 TARGET_COUNTRIES = {
     'South Korea', 'Singapore', 'Japan', 'Thailand', 
     'Indonesia', 'Malaysia', 'Philippines', 'Vietnam',
-    'Taiwan', 'Hong Kong', 'China', 'Australia'
+    'Taiwan', 'Hong Kong', 'China'
 }
+
+# ⏰ EVENT TIME WINDOW (3 months forward)
+MAX_EVENT_DAYS = 90  # 3 months
 
 print("🎵 K-pop Ticket Bot Starting on Railway...")
 print("⏰ Scan Interval: 60 SECONDS")
 print("🎯 TARGET REGIONS:", ", ".join(TARGET_COUNTRIES))
-print("🚫 OMITTED: USA")
+print("🚫 OMITTED: USA, Australia")
+print("📅 EVENT WINDOW: 3 months forward")
 print("🔄 DUPLICATE PREVENTION: 1 HOUR")
 print("🚄 Host: Railway (24/7 Free)")
 print("=" * 50)
@@ -108,13 +112,13 @@ def get_bot_commands_keyboard():
             [{"text": "🎫 Start Monitoring", "callback_data": "start"}],
             [{"text": "📊 Status", "callback_data": "status"}],
             [{"text": "🎯 Target Regions", "callback_data": "regions"}],
-            [{"text": "📅 Sale Types", "callback_data": "saletypes"}],
+            [{"text": "📅 Event Window", "callback_data": "window"}],
             [{"text": "🔄 Duplicate Filter", "callback_data": "duplicates"}],
             [{"text": "🚄 Server Info", "callback_data": "server"}]
         ]
     }
 
-# Event data focused on target regions only
+# Event data focused on target regions only (no Australia)
 KPOP_EVENTS = {
     'BTS': [
         {'venue': 'Seoul Olympic Stadium', 'city': 'Seoul', 'country': 'South Korea', 'capacity': '69,950'},
@@ -197,9 +201,19 @@ def is_target_country(country):
     """Check if country is in our target regions"""
     return country in TARGET_COUNTRIES
 
-def generate_future_date(days_from_now=30):
-    """Generate realistic future event dates"""
-    base_date = datetime.now() + timedelta(days=random.randint(7, 180))
+def is_within_time_window(event_date):
+    """Check if event date is within 3 months from now"""
+    try:
+        event_dt = datetime.strptime(event_date, '%Y-%m-%d')
+        current_dt = datetime.now()
+        days_difference = (event_dt - current_dt).days
+        return 0 <= days_difference <= MAX_EVENT_DAYS
+    except ValueError:
+        return False
+
+def generate_future_date():
+    """Generate realistic future event dates within 3 months"""
+    base_date = datetime.now() + timedelta(days=random.randint(7, MAX_EVENT_DAYS))
     return base_date.strftime('%Y-%m-%d')
 
 def generate_event_time():
@@ -254,37 +268,42 @@ def scan_interpark():
             if korean_venues:
                 venue_data = random.choice(korean_venues)
                 event_date = generate_future_date()
-                event_time = generate_event_time()
-                price = get_ticket_price(artist)
-                sale_dates = generate_sale_dates(event_date)
-                sale_status = get_sale_status(sale_dates)
                 
-                event = {
-                    'title': f'{artist} World Tour Concert',
-                    'url': 'https://ticket.interpark.com',
-                    'source': 'Interpark',
-                    'artist': artist,
-                    'venue': venue_data['venue'],
-                    'city': venue_data['city'],
-                    'country': venue_data['country'],
-                    'capacity': venue_data['capacity'],
-                    'date': event_date,
-                    'time': event_time,
-                    'price': price,
-                    'seat_type': 'Various',
-                    'presale_date': sale_dates['presale_date'],
-                    'presale_time': sale_dates['presale_time'],
-                    'general_sale_date': sale_dates['general_sale_date'],
-                    'general_sale_time': sale_dates['general_sale_time'],
-                    'sale_status': sale_status,
-                    'time_detected': datetime.now().strftime('%H:%M:%S')
-                }
-                
-                # Check for duplicates before adding
-                if not event_manager.is_duplicate_event(event):
-                    events.append(event)
+                # Check if event is within 3-month window
+                if is_within_time_window(event_date):
+                    event_time = generate_event_time()
+                    price = get_ticket_price(artist)
+                    sale_dates = generate_sale_dates(event_date)
+                    sale_status = get_sale_status(sale_dates)
+                    
+                    event = {
+                        'title': f'{artist} World Tour Concert',
+                        'url': 'https://ticket.interpark.com',
+                        'source': 'Interpark',
+                        'artist': artist,
+                        'venue': venue_data['venue'],
+                        'city': venue_data['city'],
+                        'country': venue_data['country'],
+                        'capacity': venue_data['capacity'],
+                        'date': event_date,
+                        'time': event_time,
+                        'price': price,
+                        'seat_type': 'Various',
+                        'presale_date': sale_dates['presale_date'],
+                        'presale_time': sale_dates['presale_time'],
+                        'general_sale_date': sale_dates['general_sale_date'],
+                        'general_sale_time': sale_dates['general_sale_time'],
+                        'sale_status': sale_status,
+                        'time_detected': datetime.now().strftime('%H:%M:%S')
+                    }
+                    
+                    # Check for duplicates before adding
+                    if not event_manager.is_duplicate_event(event):
+                        events.append(event)
+                    else:
+                        print(f"🔄 Interpark: Skipping duplicate {artist} at {venue_data['venue']}")
                 else:
-                    print(f"🔄 Interpark: Skipping duplicate {artist} at {venue_data['venue']}")
+                    print(f"📅 Interpark: Skipping {artist} - Event beyond 3-month window")
     except Exception as e:
         print(f"Interpark scan error: {e}")
     return events
@@ -299,84 +318,94 @@ def scan_yes24():
             korean_venues = [v for v in KPOP_EVENTS[artist] if v['country'] in ['South Korea']]
             if korean_venues:
                 venue_data = random.choice(korean_venues)
-                event_date = generate_future_date(45)
-                event_time = generate_event_time()
-                price = get_ticket_price(artist, 'Premium')
-                sale_dates = generate_sale_dates(event_date)
-                sale_status = get_sale_status(sale_dates)
+                event_date = generate_future_date()
                 
-                event = {
-                    'title': f'{artist} Fan Meeting & Concert',
-                    'url': 'https://ticket.yes24.com',
-                    'source': 'Yes24',
-                    'artist': artist,
-                    'venue': venue_data['venue'],
-                    'city': venue_data['city'],
-                    'country': venue_data['country'],
-                    'capacity': venue_data['capacity'],
-                    'date': event_date,
-                    'time': event_time,
-                    'price': price,
-                    'seat_type': 'Premium',
-                    'presale_date': sale_dates['presale_date'],
-                    'presale_time': sale_dates['presale_time'],
-                    'general_sale_date': sale_dates['general_sale_date'],
-                    'general_sale_time': sale_dates['general_sale_time'],
-                    'sale_status': sale_status,
-                    'time_detected': datetime.now().strftime('%H:%M:%S')
-                }
-                
-                # Check for duplicates before adding
-                if not event_manager.is_duplicate_event(event):
-                    events.append(event)
+                # Check if event is within 3-month window
+                if is_within_time_window(event_date):
+                    event_time = generate_event_time()
+                    price = get_ticket_price(artist, 'Premium')
+                    sale_dates = generate_sale_dates(event_date)
+                    sale_status = get_sale_status(sale_dates)
+                    
+                    event = {
+                        'title': f'{artist} Fan Meeting & Concert',
+                        'url': 'https://ticket.yes24.com',
+                        'source': 'Yes24',
+                        'artist': artist,
+                        'venue': venue_data['venue'],
+                        'city': venue_data['city'],
+                        'country': venue_data['country'],
+                        'capacity': venue_data['capacity'],
+                        'date': event_date,
+                        'time': event_time,
+                        'price': price,
+                        'seat_type': 'Premium',
+                        'presale_date': sale_dates['presale_date'],
+                        'presale_time': sale_dates['presale_time'],
+                        'general_sale_date': sale_dates['general_sale_date'],
+                        'general_sale_time': sale_dates['general_sale_time'],
+                        'sale_status': sale_status,
+                        'time_detected': datetime.now().strftime('%H:%M:%S')
+                    }
+                    
+                    # Check for duplicates before adding
+                    if not event_manager.is_duplicate_event(event):
+                        events.append(event)
+                    else:
+                        print(f"🔄 Yes24: Skipping duplicate {artist} at {venue_data['venue']}")
                 else:
-                    print(f"🔄 Yes24: Skipping duplicate {artist} at {venue_data['venue']}")
+                    print(f"📅 Yes24: Skipping {artist} - Event beyond 3-month window")
     except Exception as e:
         print(f"Yes24 scan error: {e}")
     return events
 
 def scan_ticketmaster_asia():
-    """Scan Ticketmaster Asia for regional events (NO USA)"""
+    """Scan Ticketmaster Asia for regional events (NO USA, NO AUSTRALIA)"""
     events = []
     try:
         if random.random() > 0.7:
             artist = random.choice(['BTS', 'BLACKPINK', 'TWICE', 'STRAY KIDS'])
-            # Filter to Asian venues only
-            asian_venues = [v for v in KPOP_EVENTS[artist] if v['country'] in ['Singapore', 'Australia', 'Japan']]
+            # Filter to Asian venues only (no Australia)
+            asian_venues = [v for v in KPOP_EVENTS[artist] if v['country'] in ['Singapore', 'Japan']]
             if asian_venues:
                 venue_data = random.choice(asian_venues)
-                event_date = generate_future_date(60)
-                event_time = generate_event_time()
-                price = get_ticket_price(artist, 'VIP')
-                sale_dates = generate_sale_dates(event_date)
-                sale_status = get_sale_status(sale_dates)
+                event_date = generate_future_date()
                 
-                event = {
-                    'title': f'{artist} Asia Tour - {venue_data["city"]}',
-                    'url': 'https://www.ticketmaster.sg' if venue_data['country'] == 'Singapore' else 'https://www.ticketmaster.com.au',
-                    'source': 'Ticketmaster Asia',
-                    'artist': artist,
-                    'venue': venue_data['venue'],
-                    'city': venue_data['city'],
-                    'country': venue_data['country'],
-                    'capacity': venue_data['capacity'],
-                    'date': event_date,
-                    'time': event_time,
-                    'price': price,
-                    'seat_type': 'VIP',
-                    'presale_date': sale_dates['presale_date'],
-                    'presale_time': sale_dates['presale_time'],
-                    'general_sale_date': sale_dates['general_sale_date'],
-                    'general_sale_time': sale_dates['general_sale_time'],
-                    'sale_status': sale_status,
-                    'time_detected': datetime.now().strftime('%H:%M:%S')
-                }
-                
-                # Check for duplicates before adding
-                if not event_manager.is_duplicate_event(event):
-                    events.append(event)
+                # Check if event is within 3-month window
+                if is_within_time_window(event_date):
+                    event_time = generate_event_time()
+                    price = get_ticket_price(artist, 'VIP')
+                    sale_dates = generate_sale_dates(event_date)
+                    sale_status = get_sale_status(sale_dates)
+                    
+                    event = {
+                        'title': f'{artist} Asia Tour - {venue_data["city"]}',
+                        'url': 'https://www.ticketmaster.sg' if venue_data['country'] == 'Singapore' else 'https://www.ticketmaster.co.jp',
+                        'source': 'Ticketmaster Asia',
+                        'artist': artist,
+                        'venue': venue_data['venue'],
+                        'city': venue_data['city'],
+                        'country': venue_data['country'],
+                        'capacity': venue_data['capacity'],
+                        'date': event_date,
+                        'time': event_time,
+                        'price': price,
+                        'seat_type': 'VIP',
+                        'presale_date': sale_dates['presale_date'],
+                        'presale_time': sale_dates['presale_time'],
+                        'general_sale_date': sale_dates['general_sale_date'],
+                        'general_sale_time': sale_dates['general_sale_time'],
+                        'sale_status': sale_status,
+                        'time_detected': datetime.now().strftime('%H:%M:%S')
+                    }
+                    
+                    # Check for duplicates before adding
+                    if not event_manager.is_duplicate_event(event):
+                        events.append(event)
+                    else:
+                        print(f"🔄 Ticketmaster Asia: Skipping duplicate {artist} at {venue_data['venue']}")
                 else:
-                    print(f"🔄 Ticketmaster Asia: Skipping duplicate {artist} at {venue_data['venue']}")
+                    print(f"📅 Ticketmaster Asia: Skipping {artist} - Event beyond 3-month window")
     except Exception as e:
         print(f"Ticketmaster Asia scan error: {e}")
     return events
@@ -387,42 +416,47 @@ def scan_weverse():
     try:
         if random.random() > 0.7:
             artist = random.choice(['BTS', 'TXT', 'ENHYPEN', 'LE SSERAFIM'])
-            # Filter to target countries only
+            # Filter to target countries only (no Australia)
             target_venues = [v for v in KPOP_EVENTS.get(artist, []) if v['country'] in TARGET_COUNTRIES]
             if target_venues:
                 venue_data = random.choice(target_venues)
-                event_date = generate_future_date(30)
-                event_time = generate_event_time()
-                price = get_ticket_price(artist, 'VIP')
-                sale_dates = generate_sale_dates(event_date)
-                sale_status = get_sale_status(sale_dates)
+                event_date = generate_future_date()
                 
-                event = {
-                    'title': f'{artist} Official Fanclub Concert',
-                    'url': 'https://weverseshop.io',
-                    'source': 'Weverse Shop',
-                    'artist': artist,
-                    'venue': venue_data['venue'],
-                    'city': venue_data['city'],
-                    'country': venue_data['country'],
-                    'capacity': venue_data['capacity'],
-                    'date': event_date,
-                    'time': event_time,
-                    'price': price,
-                    'seat_type': 'Official Fanclub',
-                    'presale_date': sale_dates['presale_date'],
-                    'presale_time': sale_dates['presale_time'],
-                    'general_sale_date': sale_dates['general_sale_date'],
-                    'general_sale_time': sale_dates['general_sale_time'],
-                    'sale_status': sale_status,
-                    'time_detected': datetime.now().strftime('%H:%M:%S')
-                }
-                
-                # Check for duplicates before adding
-                if not event_manager.is_duplicate_event(event):
-                    events.append(event)
+                # Check if event is within 3-month window
+                if is_within_time_window(event_date):
+                    event_time = generate_event_time()
+                    price = get_ticket_price(artist, 'VIP')
+                    sale_dates = generate_sale_dates(event_date)
+                    sale_status = get_sale_status(sale_dates)
+                    
+                    event = {
+                        'title': f'{artist} Official Fanclub Concert',
+                        'url': 'https://weverseshop.io',
+                        'source': 'Weverse Shop',
+                        'artist': artist,
+                        'venue': venue_data['venue'],
+                        'city': venue_data['city'],
+                        'country': venue_data['country'],
+                        'capacity': venue_data['capacity'],
+                        'date': event_date,
+                        'time': event_time,
+                        'price': price,
+                        'seat_type': 'Official Fanclub',
+                        'presale_date': sale_dates['presale_date'],
+                        'presale_time': sale_dates['presale_time'],
+                        'general_sale_date': sale_dates['general_sale_date'],
+                        'general_sale_time': sale_dates['general_sale_time'],
+                        'sale_status': sale_status,
+                        'time_detected': datetime.now().strftime('%H:%M:%S')
+                    }
+                    
+                    # Check for duplicates before adding
+                    if not event_manager.is_duplicate_event(event):
+                        events.append(event)
+                    else:
+                        print(f"🔄 Weverse: Skipping duplicate {artist} at {venue_data['venue']}")
                 else:
-                    print(f"🔄 Weverse: Skipping duplicate {artist} at {venue_data['venue']}")
+                    print(f"📅 Weverse: Skipping {artist} - Event beyond 3-month window")
     except Exception as e:
         print(f"Weverse scan error: {e}")
     return events
@@ -437,38 +471,43 @@ def scan_melon():
             korean_venues = [v for v in KPOP_EVENTS[artist] if v['country'] == 'South Korea']
             if korean_venues:
                 venue_data = random.choice(korean_venues)
-                event_date = generate_future_date(25)
-                event_time = generate_event_time()
-                price = get_ticket_price(artist, 'Standard')
-                sale_dates = generate_sale_dates(event_date)
-                sale_status = get_sale_status(sale_dates)
+                event_date = generate_future_date()
                 
-                event = {
-                    'title': f'{artist} Exclusive Melon Ticket Event',
-                    'url': 'http://ticket.melon.com',
-                    'source': 'Melon Ticket',
-                    'artist': artist,
-                    'venue': venue_data['venue'],
-                    'city': venue_data['city'],
-                    'country': venue_data['country'],
-                    'capacity': venue_data['capacity'],
-                    'date': event_date,
-                    'time': event_time,
-                    'price': price,
-                    'seat_type': 'Exclusive',
-                    'presale_date': sale_dates['presale_date'],
-                    'presale_time': sale_dates['presale_time'],
-                    'general_sale_date': sale_dates['general_sale_date'],
-                    'general_sale_time': sale_dates['general_sale_time'],
-                    'sale_status': sale_status,
-                    'time_detected': datetime.now().strftime('%H:%M:%S')
-                }
-                
-                # Check for duplicates before adding
-                if not event_manager.is_duplicate_event(event):
-                    events.append(event)
+                # Check if event is within 3-month window
+                if is_within_time_window(event_date):
+                    event_time = generate_event_time()
+                    price = get_ticket_price(artist, 'Standard')
+                    sale_dates = generate_sale_dates(event_date)
+                    sale_status = get_sale_status(sale_dates)
+                    
+                    event = {
+                        'title': f'{artist} Exclusive Melon Ticket Event',
+                        'url': 'http://ticket.melon.com',
+                        'source': 'Melon Ticket',
+                        'artist': artist,
+                        'venue': venue_data['venue'],
+                        'city': venue_data['city'],
+                        'country': venue_data['country'],
+                        'capacity': venue_data['capacity'],
+                        'date': event_date,
+                        'time': event_time,
+                        'price': price,
+                        'seat_type': 'Exclusive',
+                        'presale_date': sale_dates['presale_date'],
+                        'presale_time': sale_dates['presale_time'],
+                        'general_sale_date': sale_dates['general_sale_date'],
+                        'general_sale_time': sale_dates['general_sale_time'],
+                        'sale_status': sale_status,
+                        'time_detected': datetime.now().strftime('%H:%M:%S')
+                    }
+                    
+                    # Check for duplicates before adding
+                    if not event_manager.is_duplicate_event(event):
+                        events.append(event)
+                    else:
+                        print(f"🔄 Melon: Skipping duplicate {artist} at {venue_data['venue']}")
                 else:
-                    print(f"🔄 Melon: Skipping duplicate {artist} at {venue_data['venue']}")
+                    print(f"📅 Melon: Skipping {artist} - Event beyond 3-month window")
     except Exception as e:
         print(f"Melon scan error: {e}")
     return events
@@ -479,52 +518,57 @@ def scan_twitter():
     try:
         if random.random() > 0.6:
             artist = random.choice(list(KPOP_EVENTS.keys()))
-            # Filter to target countries only
+            # Filter to target countries only (no Australia)
             target_venues = [v for v in KPOP_EVENTS[artist] if v['country'] in TARGET_COUNTRIES]
             if target_venues:
                 venue_data = random.choice(target_venues)
-                event_date = generate_future_date(15)
-                event_time = generate_event_time()
-                price = get_ticket_price(artist)
-                sale_dates = generate_sale_dates(event_date)
-                sale_status = get_sale_status(sale_dates)
+                event_date = generate_future_date()
                 
-                event = {
-                    'title': f'🚨 {artist} TICKET ANNOUNCEMENT!',
-                    'url': 'https://twitter.com/search?q=kpop%20ticket%20sale',
-                    'source': 'Twitter Official',
-                    'artist': artist,
-                    'venue': venue_data['venue'],
-                    'city': venue_data['city'],
-                    'country': venue_data['country'],
-                    'capacity': venue_data['capacity'],
-                    'date': event_date,
-                    'time': event_time,
-                    'price': price,
-                    'seat_type': 'Various',
-                    'presale_date': sale_dates['presale_date'],
-                    'presale_time': sale_dates['presale_time'],
-                    'general_sale_date': sale_dates['general_sale_date'],
-                    'general_sale_time': sale_dates['general_sale_time'],
-                    'sale_status': sale_status,
-                    'time_detected': datetime.now().strftime('%H:%M:%S'),
-                    'urgent': True
-                }
-                
-                # Check for duplicates before adding
-                if not event_manager.is_duplicate_event(event):
-                    events.append(event)
+                # Check if event is within 3-month window
+                if is_within_time_window(event_date):
+                    event_time = generate_event_time()
+                    price = get_ticket_price(artist)
+                    sale_dates = generate_sale_dates(event_date)
+                    sale_status = get_sale_status(sale_dates)
+                    
+                    event = {
+                        'title': f'🚨 {artist} TICKET ANNOUNCEMENT!',
+                        'url': 'https://twitter.com/search?q=kpop%20ticket%20sale',
+                        'source': 'Twitter Official',
+                        'artist': artist,
+                        'venue': venue_data['venue'],
+                        'city': venue_data['city'],
+                        'country': venue_data['country'],
+                        'capacity': venue_data['capacity'],
+                        'date': event_date,
+                        'time': event_time,
+                        'price': price,
+                        'seat_type': 'Various',
+                        'presale_date': sale_dates['presale_date'],
+                        'presale_time': sale_dates['presale_time'],
+                        'general_sale_date': sale_dates['general_sale_date'],
+                        'general_sale_time': sale_dates['general_sale_time'],
+                        'sale_status': sale_status,
+                        'time_detected': datetime.now().strftime('%H:%M:%S'),
+                        'urgent': True
+                    }
+                    
+                    # Check for duplicates before adding
+                    if not event_manager.is_duplicate_event(event):
+                        events.append(event)
+                    else:
+                        print(f"🔄 Twitter: Skipping duplicate {artist} at {venue_data['venue']}")
                 else:
-                    print(f"🔄 Twitter: Skipping duplicate {artist} at {venue_data['venue']}")
+                    print(f"📅 Twitter: Skipping {artist} - Event beyond 3-month window")
     except Exception as e:
         print(f"Twitter scan error: {e}")
     return events
 
 def scan_all_ticket_sites():
-    """Scan ALL K-pop ticket sites with regional filtering and duplicate prevention"""
+    """Scan ALL K-pop ticket sites with regional filtering, 3-month window, and duplicate prevention"""
     all_events = []
     
-    print("🌐 Scanning K-pop ticket sites (Regional + Duplicate Filter)...")
+    print("🌐 Scanning K-pop ticket sites (Regional + 3-Month Window + Duplicate Filter)...")
     
     # Clean up old events first
     event_manager.cleanup_old_events()
@@ -537,7 +581,7 @@ def scan_all_ticket_sites():
     all_events.extend(scan_melon())
     all_events.extend(scan_twitter())
     
-    # Final filter to ensure no USA events slip through
+    # Final filter to ensure no unwanted events slip through
     filtered_events = [event for event in all_events if is_target_country(event['country'])]
     
     if filtered_events:
@@ -558,7 +602,7 @@ class KpopTicketMonitor:
                 active_users = len(user_manager.get_active_users())
                 print(f"🔍 Scan #{cycle_count} - {active_users} users - {datetime.now().strftime('%H:%M:%S')}")
                 
-                # Scan ALL ticket sites with regional filtering and duplicate prevention
+                # Scan ALL ticket sites with all filters
                 events = scan_all_ticket_sites()
                 
                 # Send enhanced alerts to all active users
@@ -588,6 +632,7 @@ class KpopTicketMonitor:
 🔗 <b>Link:</b> {event['url']}
 
 ⏰ <b>Alert Time:</b> {event['time_detected']}
+📅 <b>Event Window:</b> 3 Months
 🔄 <b>Duplicate Protection:</b> 1 Hour
 🚄 <b>Server:</b> Railway (24/7)
 
@@ -615,6 +660,7 @@ class KpopTicketMonitor:
 🔗 <b>Link:</b> {event['url']}
 
 ⏰ <b>Alert Time:</b> {event['time_detected']}
+📅 <b>Event Window:</b> 3 Months
 🔄 <b>Duplicate Protection:</b> 1 Hour
 🚄 <b>Server:</b> Railway (24/7)
 
@@ -630,7 +676,7 @@ class KpopTicketMonitor:
         thread = threading.Thread(target=monitor_loop)
         thread.daemon = True
         thread.start()
-        print("✅ Enhanced monitoring started (60-second intervals + 1hr duplicate protection)")
+        print("✅ Enhanced monitoring started (60-second intervals + 3-month window + 1hr duplicate protection)")
 
 monitor = KpopTicketMonitor()
 
@@ -646,12 +692,13 @@ def process_update(update):
             
             if text.startswith("/start"):
                 user_manager.add_user(chat_id, username, first_name)
-                welcome = """🤖 <b>K-pop Ticket Alert Bot - REGIONAL FOCUS</b>
+                welcome = """🤖 <b>K-pop Ticket Alert Bot - SMART MONITORING</b>
 
 ✅ <b>Host:</b> Railway (24/7 Free)
 ⏰ <b>Scan Interval:</b> 60 seconds
-🎯 <b>Target Regions:</b> Korea, Japan, Singapore, Thailand, Indonesia, Malaysia, Philippines, Vietnam, Taiwan, Hong Kong, China, Australia
-🚫 <b>Omitted:</b> USA
+🎯 <b>Target Regions:</b> Korea, Japan, Singapore, Thailand, Indonesia, Malaysia, Philippines, Vietnam, Taiwan, Hong Kong, China
+🚫 <b>Omitted:</b> USA, Australia
+📅 <b>Event Window:</b> 3 Months Forward
 🔄 <b>Duplicate Protection:</b> 1 Hour
 
 🌐 <b>Enhanced Alerts Include:</b>
@@ -666,26 +713,27 @@ def process_update(update):
 🔵 <b>General Sale Dates</b>
 📊 <b>Current Sale Status</b>
 
-🚨 <b>No repeat alerts for 1 hour - Clean notifications!</b>"""
+🚨 <b>Only relevant, recent events - No spam!</b>"""
                 send_telegram_message(chat_id, welcome, get_bot_commands_keyboard())
                 print(f"👤 New user: {chat_id}")
             
             elif text.startswith("/status"):
                 active_users = len(user_manager.get_active_users())
                 tracked_events = len(event_manager.sent_events)
-                status_msg = f"""📊 <b>Bot Status - Regional Focus</b>
+                status_msg = f"""📊 <b>Bot Status - Smart Monitoring</b>
 
 🟢 <b>Status:</b> ACTIVE
 👥 <b>Active Users:</b> {active_users}
 ⏰ <b>Scan Interval:</b> 60 seconds
 🚄 <b>Host:</b> Railway (24/7)
 🎯 <b>Target Regions:</b> {len(TARGET_COUNTRIES)} countries
-🚫 <b>Omitted:</b> USA
+🚫 <b>Omitted:</b> USA, Australia
+📅 <b>Event Window:</b> 3 Months
 🔄 <b>Tracked Events:</b> {tracked_events}
 📅 <b>Duplicate Protection:</b> 1 Hour
 🕒 <b>Last Scan:</b> {datetime.now().strftime('%H:%M:%S')}
 
-<code>Smart monitoring with duplicate prevention</code>"""
+<code>Smart monitoring with time and regional filters</code>"""
                 send_telegram_message(chat_id, status_msg, get_bot_commands_keyboard())
             
             elif text.startswith("/regions"):
@@ -694,10 +742,27 @@ def process_update(update):
 
 {regions_list}
 
-🚫 <b>USA events are filtered out</b>
+🚫 <b>Filtered Out:</b> USA, Australia
 
 <code>Focusing on major K-pop markets in Asia</code>"""
                 send_telegram_message(chat_id, regions_msg, get_bot_commands_keyboard())
+            
+            elif text.startswith("/window"):
+                window_msg = f"""📅 <b>Event Time Window</b>
+
+✅ <b>Status:</b> ACTIVE
+⏰ <b>Window:</b> 3 Months Forward
+📊 <b>Maximum Days:</b> {MAX_EVENT_DAYS} days
+🕒 <b>Current Date:</b> {datetime.now().strftime('%Y-%m-%d')}
+
+<b>What this means:</b>
+• Only events within next 3 months are shown
+• No distant future events (6+ months away)
+• Focus on immediate ticket opportunities
+• Clean, relevant alerts only
+
+<code>Staying focused on near-term opportunities</code>"""
+                send_telegram_message(chat_id, window_msg, get_bot_commands_keyboard())
             
             elif text.startswith("/duplicates"):
                 tracked_count = len(event_manager.sent_events)
@@ -760,15 +825,17 @@ def process_update(update):
             
             if data == "start":
                 user_manager.add_user(chat_id, None, None)
-                send_telegram_message(chat_id, "✅ Smart monitoring started! You'll receive alerts for K-pop concerts in Asia only (no USA) with 1-hour duplicate protection.", get_bot_commands_keyboard())
+                send_telegram_message(chat_id, "✅ Smart monitoring started! You'll receive alerts for K-pop concerts in Asia only (no USA/Australia) within 3-month window with 1-hour duplicate protection.", get_bot_commands_keyboard())
             elif data == "status":
                 active_users = len(user_manager.get_active_users())
                 tracked_events = len(event_manager.sent_events)
-                status_msg = f"📊 Active Users: {active_users}\n⏰ Scanning every 60 seconds\n🎯 Target: {len(TARGET_COUNTRIES)} regions\n🚫 No USA events\n🔄 Tracking: {tracked_events} events\n🕒 Duplicate protection: 1 hour"
+                status_msg = f"📊 Active Users: {active_users}\n⏰ Scanning every 60 seconds\n🎯 Target: {len(TARGET_COUNTRIES)} regions\n🚫 No USA/Australia\n📅 3-month window\n🔄 Tracking: {tracked_events} events"
                 send_telegram_message(chat_id, status_msg, get_bot_commands_keyboard())
             elif data == "regions":
                 regions_list = ", ".join(sorted(TARGET_COUNTRIES))
-                send_telegram_message(chat_id, f"🎯 Monitoring: {regions_list}\n🚫 USA events filtered out", get_bot_commands_keyboard())
+                send_telegram_message(chat_id, f"🎯 Monitoring: {regions_list}\n🚫 USA/Australia filtered out", get_bot_commands_keyboard())
+            elif data == "window":
+                send_telegram_message(chat_id, f"📅 Event Window: 3 MONTHS\n⏰ Maximum: {MAX_EVENT_DAYS} days forward\n✅ Only near-term events", get_bot_commands_keyboard())
             elif data == "duplicates":
                 tracked_count = len(event_manager.sent_events)
                 send_telegram_message(chat_id, f"🔄 Duplicate protection: 1 HOUR\n📊 Currently tracking: {tracked_count} events\n✅ No repeat alerts for same event", get_bot_commands_keyboard())
@@ -809,31 +876,34 @@ monitor.start_continuous_monitoring()
 start_bot_polling()
 
 # Send startup notification
-startup_msg = """🤖 <b>K-pop Ticket Bot - SMART MONITORING</b>
+startup_msg = """🤖 <b>K-pop Ticket Bot - ULTRA SMART MONITORING</b>
 
 ✅ <b>Host:</b> Railway (24/7 Free)
 ⏰ <b>Scan Interval:</b> 60 seconds
-🎯 <b>Target Regions:</b> Korea, Japan, Singapore, Thailand, Indonesia, Malaysia, Philippines, Vietnam, Taiwan, Hong Kong, China, Australia
-🚫 <b>Omitted:</b> USA
+🎯 <b>Target Regions:</b> Korea, Japan, Singapore, Thailand, Indonesia, Malaysia, Philippines, Vietnam, Taiwan, Hong Kong, China
+🚫 <b>Omitted:</b> USA, Australia
+📅 <b>Event Window:</b> 3 MONTHS FORWARD
 🔄 <b>Duplicate Protection:</b> 1 HOUR
 🚄 <b>Status:</b> RUNNING
 🕒 <b>Started:</b> {time}
 
 🎫 <b>Smart Features:</b>
 • Regional filtering (Asia only)
-• No USA events
+• No USA/Australia events
+• 3-month event window only
 • 1-hour duplicate protection
 • Automatic memory cleanup
-• Clean, non-repetitive alerts
+• Clean, relevant alerts only
 
-<code>Advanced K-pop ticket monitoring activated! ©2025 @BrainyError</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+<code>Ultra-smart K-pop ticket monitoring activated!</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
 send_telegram_message("728916383", startup_msg)
-print("✅ Smart startup notification sent")
+print("✅ Ultra-smart startup notification sent")
 
-print("🎯 Bot is now running on Railway with SMART filtering!")
+print("🎯 Bot is now running on Railway with ULTRA-SMART filtering!")
 print("🎯 Target regions:", ", ".join(TARGET_COUNTRIES))
-print("🚫 USA events are completely filtered out")
+print("🚫 USA and Australia events are completely filtered out")
+print("📅 Event window: 3 MONTHS forward only")
 print("🔄 Duplicate protection: 1 HOUR - No repeat alerts")
 print("🚄 Railway will keep it running 24/7 automatically")
 
