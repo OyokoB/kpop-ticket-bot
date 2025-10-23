@@ -22,7 +22,6 @@ MAX_EVENT_DAYS = 90  # 3 months
 print("🎵 K-pop Ticket Bot Starting on Railway...")
 print("⏰ Scan Interval: 60 SECONDS")
 print("🎯 TARGET REGIONS:", ", ".join(TARGET_COUNTRIES))
-print("🚫 OMITTED: USA, Australia")
 print("📅 EVENT WINDOW: 3 months forward")
 print("🔄 DUPLICATE PREVENTION: 1 HOUR")
 print("🚄 Host: Railway (24/7 Free)")
@@ -713,7 +712,7 @@ def process_update(update):
 🔵 <b>General Sale Dates</b>
 📊 <b>Current Sale Status</b>
 
-🚨 <b>Only relevant, recent events - No spam!</b>"""
+🚨 <b>Only relevant, recent events - No spam! ©2025 @BrainyError</b>"""
                 send_telegram_message(chat_id, welcome, get_bot_commands_keyboard())
                 print(f"👤 New user: {chat_id}")
             
@@ -895,7 +894,7 @@ startup_msg = """🤖 <b>K-pop Ticket Bot - ULTRA SMART MONITORING</b>
 • Automatic memory cleanup
 • Clean, relevant alerts only
 
-<code>Ultra-smart K-pop ticket monitoring activated!</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+<code>Ultra-smart K-pop ticket monitoring activated! ©2025 @BrainyError</code>""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
 send_telegram_message("728916383", startup_msg)
 print("✅ Ultra-smart startup notification sent")
