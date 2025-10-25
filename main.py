@@ -60,12 +60,24 @@ def call_openrouter(prompt):
 def extract_events(raw_text):
     if not raw_text:
         return []
-    prompt = f"""
-    Extract K-pop concert events. Output ONLY a JSON array. Format per event:
-    {{"artist":"str","venue":"str","date":"YYYY-MM-DD HH:MM","region":"City, Country","presale":"...","general_sale":"...","source":"https://...","verified":true}}
-    Artists: TXT, ENHYPEN, SEVENTEEN, BLACKPINK, BTS, TWICE, Stray Kids, NewJeans, IVE, LE SSERAFIM.
-    Text: {raw_text}
-    """
+   # Inside main.py → extract_events()
+prompt = f"""
+You are a bilingual K-pop event parser. The text may be in English or Korean (already translated to English).
+Extract ONLY official concert announcements for these artists: {', '.join(KPOP_ARTISTS_EN)}.
+Output a JSON array of events in this format:
+{{
+  "artist": "English artist name (e.g., SEVENTEEN)",
+  "venue": "Venue name",
+  "date": "YYYY-MM-DD HH:MM",
+  "region": "City, Country",
+  "presale": "YYYY-MM-DD HH:MM TZ",
+  "general_sale": "YYYY-MM-DD HH:MM TZ",
+  "source": "https://...",
+  "verified": true
+}}
+Ignore rumors, fan posts, or unconfirmed dates.
+Text: {raw_text}
+"""
     result = call_openrouter(prompt)
     if not result:
         return []
