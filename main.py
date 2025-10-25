@@ -5,7 +5,7 @@ import requests
 from datetime import datetime
 from scraper import fetch_all_sources
 
-# === CONFIG ===
+# Config
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SENT_EVENTS_FILE = "data/sent_events.json"
@@ -60,24 +60,23 @@ def call_openrouter(prompt):
 def extract_events(raw_text):
     if not raw_text:
         return []
-   # Inside main.py → extract_events()
-prompt = f"""
-You are a bilingual K-pop event parser. The text may be in English or Korean (already translated to English).
-Extract ONLY official concert announcements for these artists: {', '.join(KPOP_ARTISTS_EN)}.
-Output a JSON array of events in this format:
-{{
-  "artist": "English artist name (e.g., SEVENTEEN)",
-  "venue": "Venue name",
-  "date": "YYYY-MM-DD HH:MM",
-  "region": "City, Country",
-  "presale": "YYYY-MM-DD HH:MM TZ",
-  "general_sale": "YYYY-MM-DD HH:MM TZ",
-  "source": "https://...",
-  "verified": true
-}}
-Ignore rumors, fan posts, or unconfirmed dates.
-Text: {raw_text}
-"""
+    prompt = f"""
+    You are a K-pop event parser. Input may be in English or Korean.
+    Extract ONLY official concert announcements for: TXT, ENHYPEN, SEVENTEEN, BLACKPINK, BTS, TWICE, Stray Kids, NewJeans, IVE, LE SSERAFIM.
+    Output a JSON array. Each event must have:
+    {{
+      "artist": "English name (e.g., SEVENTEEN)",
+      "venue": "Venue name",
+      "date": "YYYY-MM-DD HH:MM",
+      "region": "City, Country",
+      "presale": "YYYY-MM-DD HH:MM TZ",
+      "general_sale": "YYYY-MM-DD HH:MM TZ",
+      "source": "https://...",
+      "verified": true
+    }}
+    Ignore rumors or unconfirmed dates.
+    Text: {raw_text}
+    """
     result = call_openrouter(prompt)
     if not result:
         return []
@@ -87,36 +86,40 @@ Text: {raw_text}
     try:
         events = json.loads(content)
         return events if isinstance(events, list) else [events] if isinstance(events, dict) else []
-    except:
+    except Exception as e:
+        print(f"[ERROR] JSON parse failed: {e}")
         return []
 
 def broadcast_to_subscribers(event):
-    subscribers = load_json(SUBSCRIBERS_FILE)
-    message = (
-        f"🚨 *New K-pop Event!* 🚨\n\n"
-        f"🎤 {event['artist']}\n"
-        f"📍 {event['venue']} ({event['region']})\n"
-        f"📅 {event['date']}\n"
-        f"🎟️ Presale: {event.get('presale', 'TBA')}\n"
-        f"🔗 [Tickets]({event['source']})"
-    )
-    for user_id in subscribers:
-        try:
-            requests.post(
-                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-                json={"chat_id": user_id, "text": message, "parse_mode": "Markdown"}
-            )
-        except Exception as e:
-            print(f"[WARN] Failed to send to {user_id}: {e}")
+    try:
+        subscribers = load_json(SUBSCRIBERS_FILE)
+        message = (
+            f"🚨 *New K-pop Event!* 🚨\n\n"
+            f"🎤 {event['artist']}\n"
+            f"📍 {event['venue']} ({event['region']})\n"
+            f"📅 {event['date']}\n"
+            f"🎟️ Presale: {event.get('presale', 'TBA')}\n"
+            f"🔗 [Tickets]({event['source']})"
+        )
+        for user_id in subscribers:
+            try:
+                requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={"chat_id": user_id, "text": message, "parse_mode": "Markdown"}
+                )
+            except Exception as e:
+                print(f"[WARN] Failed to send to {user_id}: {e}")
+    except Exception as e:
+        print(f"[ERROR] Broadcast failed: {e}")
 
 def main_loop():
     print("✅ K-pop Alert Engine started (runs every 5 minutes)")
     while True:
         try:
-            print(f"\n[{datetime.now()}] Checking sources...")
+            print(f"\n[{datetime.now()}] Checking Twitter + Weverse...")
             raw = fetch_all_sources()
             if not raw:
-                print("[INFO] No new data from sources.")
+                print("[INFO] No new announcements found.")
             else:
                 events = extract_events(raw)
                 print(f"[INFO] Extracted {len(events)} events")
@@ -124,12 +127,18 @@ def main_loop():
                     if not is_duplicate(ev):
                         save_event(ev)
                         broadcast_to_subscribers(ev)
+                        print(f"[INFO] New alert: {ev.get('artist')} – {ev.get('date')}")
                     else:
-                        print(f"[INFO] Duplicate: {ev.get('artist')} – {ev.get('date')}")
+                        print(f"[INFO] Duplicate skipped: {ev.get('artist')}")
         except Exception as e:
             print(f"[CRITICAL] Loop error: {e}")
         print("💤 Sleeping for 5 minutes...")
         time.sleep(300)  # 5 minutes
 
 if __name__ == "__main__":
+    # Validate env vars
+    if not OPENROUTER_API_KEY:
+        raise ValueError("OPENROUTER_API_KEY is missing!")
+    if not TELEGRAM_BOT_TOKEN:
+        raise ValueError("TELEGRAM_BOT_TOKEN is missing!")
     main_loop()
