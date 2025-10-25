@@ -1,4 +1,5 @@
-.env
+data/*.json
 __pycache__/
 *.pyc
-data/sent_events.json
+.env
+.DS_Store
