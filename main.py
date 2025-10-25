@@ -8,10 +8,10 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# Paths
+# File to track sent alerts
 SENT_EVENTS_FILE = "data/sent_events.json"
 
-# Ensure data dir exists
+# Ensure data directory exists
 os.makedirs("data", exist_ok=True)
 if not os.path.exists(SENT_EVENTS_FILE):
     with open(SENT_EVENTS_FILE, "w") as f:
@@ -23,10 +23,11 @@ def load_sent_events():
 
 def save_sent_event(event):
     events = load_sent_events()
+    # Use source + date as unique key
     events.append({
-        "source": event["source"],
-        "date": event["date"],
-        "artist": event["artist"]
+        "source": event.get("source", ""),
+        "date": event.get("date", ""),
+        "artist": event.get("artist", "")
     })
     with open(SENT_EVENTS_FILE, "w") as f:
         json.dump(events, f)
@@ -34,25 +35,49 @@ def save_sent_event(event):
 def is_duplicate(event):
     sent = load_sent_events()
     for e in sent:
-        if e["source"] == event["source"] and e["date"] == event["date"]:
+        if e["source"] == event.get("source") and e["date"] == event.get("date"):
             return True
     return False
 
 def fetch_raw_announcements():
     """
-    Simulate fetching from a source.
-    In real use: scrape Twitter/X, Weverse, or ticket sites.
-    For demo: return hardcoded example.
+    REPLACE THIS WITH REAL DATA SOURCE LATER.
+    For now: simulate a real announcement.
     """
     return """
-    TOMORROW X TOGETHER (TXT) has announced their 'ACT: PROMISE' World Tour stop in Kuala Lumpur!
+    TOMORROW X TOGETHER (TXT) 'ACT: PROMISE' World Tour – Kuala Lumpur!
     Date: February 14, 2026 at 6:00 PM
     Venue: Axiata Arena, Bukit Jalil
-    Region: Kuala Lumpur, Malaysia
-    Presale starts: October 22, 2025 at 12:00 PM MYT (MOA members)
-    General sale: October 25, 2025 at 12:00 PM MYT
+    Location: Kuala Lumpur, Malaysia
+    MOA Presale: October 22, 2025 at 12:00 PM MYT
+    General Sale: October 25, 2025 at 12:00 PM MYT
     Tickets: https://my.bookmyshow.com/e/BMSTXT26
     """
+
+def call_openrouter(prompt: str):
+    """Call OpenRouter with qwen/qwen3-coder:free"""
+    try:
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://github.com/your-username/kpop-event-alerts",
+                "X-Title": "K-pop Event Alert Bot",
+            },
+            data=json.dumps({
+                "model": "qwen/qwen3-coder:free",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.0,
+                "max_tokens": 500
+            }),
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"[ERROR] OpenRouter API call failed: {e}")
+        return None
 
 def extract_structured_event(raw_text):
     prompt = f"""
@@ -67,36 +92,24 @@ def extract_structured_event(raw_text):
       "source": "https://...",
       "verified": true
     }}
-    Do not add extra fields. If a field is unknown, omit it or use null.
+    Do not add any other text, explanation, or markdown. If a field is unknown, omit it or use null.
     Text: {raw_text}
     """
+    
+    result = call_openrouter(prompt)
+    if not result:
+        return None
+
+    content = result["choices"][0]["message"]["content"].strip()
+
+    # Remove markdown code blocks if present
+    if content.startswith("```"):
+        content = content.split("```json")[-1].split("```")[0].strip()
 
     try:
-        response = requests.post(
-            url="https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "qwen/qwen3-coder",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.0,
-                "max_tokens": 500
-            },
-            timeout=30
-        )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"].strip()
-
-        # Clean markdown code blocks
-        if content.startswith("```"):
-            content = content.split("```json")[-1].split("```")[0].strip()
-
-        event = json.loads(content)
-        return event
-    except Exception as e:
-        print(f"[ERROR] Extraction failed: {e}")
+        return json.loads(content)
+    except json.JSONDecodeError:
+        print(f"[ERROR] Invalid JSON from model: {content}")
         return None
 
 def send_telegram_alert(event):
@@ -110,20 +123,23 @@ def send_telegram_alert(event):
         f"🔗 [Buy Tickets]({event['source']})"
     )
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": False
-    }
     try:
-        requests.post(url, json=payload, timeout=10)
-        print(f"[INFO] Alert sent for {event['artist']} on {event['date']}")
+        requests.post(
+            url,
+            json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": message,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": False
+            },
+            timeout=10
+        )
+        print(f"[INFO] Alert sent: {event['artist']} – {event['date']}")
     except Exception as e:
-        print(f"[ERROR] Telegram send failed: {e}")
+        print(f"[ERROR] Failed to send Telegram alert: {e}")
 
 def main():
-    print(f"[{datetime.now()}] Checking for new K-pop events...")
+    print(f"[{datetime.utcnow().isoformat()}] Starting K-pop event check...")
     raw = fetch_raw_announcements()
     event = extract_structured_event(raw)
 
