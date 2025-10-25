@@ -70,10 +70,10 @@ def scrape_twitter_v2():
             timeout=15
         )
         response.raise_for_status()
-        mark_twitter_fetched()  # Only mark on success
+        mark_twitter_fetched()
         data = response.json()
         tweets = []
-        if "data" in 
+        if "data" in data:  # ✅ FIXED: was incomplete before
             for tweet in data["data"]:
                 clean = clean_and_prepare(tweet["text"])
                 if any(kw in clean.lower() for kw in ["tour", "concert", "티켓", "투어", "월드투어", "tickets"]):
@@ -82,7 +82,6 @@ def scrape_twitter_v2():
     except requests.HTTPError as e:
         if e.response.status_code == 429:
             print("[WARN] Twitter rate limit hit. Skipping for 1 hour.")
-            # Still mark as fetched to avoid retrying immediately
             mark_twitter_fetched()
         else:
             print(f"[ERROR] Twitter API failed: {e}")
@@ -92,7 +91,6 @@ def scrape_twitter_v2():
         return []
 
 def scrape_weverse():
-    """Weverse has no rate limits — safe to call every 5 min."""
     weverse_rss = {
         "TXT": "https://weverse.io/txt/notice/rss",
         "ENHYPEN": "https://weverse.io/enhypen/notice/rss",
@@ -113,8 +111,7 @@ def scrape_weverse():
     return notices
 
 def fetch_all_sources():
-    """Weverse: every 5 min | Twitter: max once/hour"""
     weverse = scrape_weverse()
-    twitter = scrape_twitter_v2()  # Respects rate limit
+    twitter = scrape_twitter_v2()
     combined = "\n\n---\n\n".join(twitter + weverse)
     return combined if combined.strip() else None
