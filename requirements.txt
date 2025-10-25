@@ -1,4 +1,4 @@
 requests==2.32.3
 python-telegram-bot==20.7
 feedparser==6.0.11
-
+beautifulsoup4==4.12.3
